@@ -1,8 +1,12 @@
 from functools import lru_cache
+import logging
 from typing import Annotated, Literal
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+
+logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -71,6 +75,19 @@ class Settings(BaseSettings):
         if isinstance(value, str):
             return [item.strip() for item in value.split(",") if item.strip()]
         return value
+
+    @field_validator("browser_headless", mode="before")
+    @classmethod
+    def resilient_browser_headless(cls, value):
+        if not isinstance(value, str):
+            return value
+        normalized = value.strip().casefold()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off", ""}:
+            return False
+        logger.warning("BROWSER_HEADLESS possui valor invalido; usando false")
+        return False
 
     @field_validator("database_url")
     @classmethod

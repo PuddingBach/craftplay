@@ -15,6 +15,7 @@ from backend.auth import calculate_channel_access
 from backend.config import get_settings
 from backend.room_manager import RoomManager
 from backend.auth import create_access_token, create_websocket_ticket, decode_websocket_ticket, upsert_user
+from backend.config import Settings
 from backend.database import SessionLocal, init_db
 from backend.main import app
 from backend.models import BrowserEntry, Room
@@ -161,6 +162,11 @@ def test_development_headers_are_never_accepted_on_public_hosts():
     with TestClient(app, base_url="https://public.example") as client:
         response = client.get("/api/browser/entries", headers={"X-Discord-User-Id": "impersonated", "X-Discord-Username": "Host"})
         assert response.status_code == 401
+
+
+def test_invalid_optional_browser_headless_does_not_crash_settings():
+    settings = Settings(_env_file=None, browser_headless="falsev")
+    assert settings.browser_headless is False
 
 
 @pytest.mark.asyncio
