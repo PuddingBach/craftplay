@@ -16,7 +16,7 @@ from backend.playback import PlaybackResolver
 from backend.playback.validation import validate_media_url
 from backend.providers import CatalogService
 from backend.providers.watch_availability import WatchAvailabilityProvider
-from backend.schemas import CustomSourceCreate, DiscordAuthRequest, ExternalIds, FavoriteCreate, MediaItem, ProgressCreate, ProviderDebugRequest, RoomCreate, RoomView
+from backend.schemas import CustomSourceCreate, DiscordAuthRequest, ExternalIds, FavoriteCreate, MediaItem, ProgressCreate, ProviderDebugRequest, RoomCreate, RoomView, SourceFailureRequest, SourceValidationRequest
 
 
 router = APIRouter(prefix="/api")
@@ -58,6 +58,11 @@ def public_config():
         "tmdb_configured": bool(settings.tmdb_api_key or settings.tmdb_read_access_token),
         "plenoflu_enabled": settings.plenoflu_enabled,
         "redecanais_provider_enabled": settings.redecanais_provider_enabled,
+        "jw_player": {
+            "enabled": settings.jw_player_enabled,
+            "library_url": settings.jw_player_library_url,
+            "license_key": settings.jw_player_license_key,
+        },
     }
 
 
@@ -120,11 +125,12 @@ async def recommendations(media_id: str, user: User = Depends(current_user)):
 
 
 @router.get("/media/{media_id:path}/sources")
-async def sources(media_id: str, season: int = 0, episode: int = 0, user: User = Depends(current_user)):
+async def sources(media_id: str, season: int = 0, episode: int = 0,
+                  exclude_provider: list[str] = Query(default=[]), user: User = Depends(current_user)):
     item = await catalog.details(media_id)
     if not item:
         raise HTTPException(status_code=404, detail="Conteúdo não encontrado")
-    resolved = await playback.resolve(item, season, episode)
+    resolved = await playback.resolve(item, season, episode, exclude_providers=set(exclude_provider))
     unavailable = []
     settings = get_settings()
     if settings.plenoflu_enabled and item.external_ids.imdb and not any(source.provider == "plenoflu" for source in resolved):
@@ -133,6 +139,12 @@ async def sources(media_id: str, season: int = 0, episode: int = 0, user: User =
             "message": "O PlenoFlu recusou a incorporação deste conteúdo. A proteção do serviço foi respeitada e nenhuma tentativa de contorno foi realizada.",
         })
     return {"sources": resolved, "unavailable": unavailable}
+
+
+@router.post("/playback/source-failure")
+def playback_source_failure(payload: SourceFailureRequest, user: User = Depends(current_user)):
+    playback.invalidate(payload.media_id)
+    return {"invalidated": True, "provider": payload.provider}
 
 
 @router.get("/media/{media_id:path}/availability")
@@ -161,7 +173,7 @@ async def provider_debug(payload: ProviderDebugRequest, _: None = Depends(requir
 @router.get("/playback/test-sources")
 async def test_sources(_: None = Depends(require_admin)):
     candidates = [
-        {"provider": "W3C", "type": "mp4", "url": "https://media.w3.org/2010/05/sintel/trailer.mp4", "media_id": "test:mp4", "quality": "720p", "language": "original"},
+        {"provider": "Blender Open Movie / Internet Archive", "type": "mp4", "url": "https://archive.org/download/youtube-aqz-KE-bpKQ/aqz-KE-bpKQ.mp4", "media_id": "test:mp4", "quality": "720p", "language": "original"},
         {"provider": "Mux test stream", "type": "hls", "url": "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8", "media_id": "test:hls", "quality": "auto", "language": "original"},
         {"provider": "Shaka demo assets", "type": "dash", "url": "https://storage.googleapis.com/shaka-demo-assets/angel-one/dash.mpd", "media_id": "test:dash", "quality": "auto", "language": "original"},
         {"provider": "YouTube API demo", "type": "youtube", "url": "https://www.youtube.com/embed/M7lc1UVf-VE?enablejsapi=1", "media_id": "test:youtube", "quality": "auto", "language": "original", "metadata": {"video_id": "M7lc1UVf-VE"}},
@@ -172,6 +184,15 @@ async def test_sources(_: None = Depends(require_admin)):
         valid, reason = await validate_media_url(candidate["url"], candidate["type"])
         results.append({**candidate, "is_playable": valid, "validation": reason})
     return {"sources": results}
+
+
+@router.post("/playback/validate-source")
+async def validate_debug_source(payload: SourceValidationRequest, _: None = Depends(require_admin)):
+    valid, reason = await validate_media_url(payload.url, payload.source_type)
+    return {"source": {"provider": payload.provider, "type": payload.source_type, "url": payload.url,
+                       "media_id": "debug:player", "quality": payload.quality, "language": "original",
+                       "subtitles": [], "audio_tracks": [], "is_playable": valid,
+                       "metadata": {"validation": reason}}, "validation": reason}
 
 
 @router.get("/admin/sources")

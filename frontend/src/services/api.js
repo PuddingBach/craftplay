@@ -38,11 +38,12 @@ export class ApiClient {
   search(params) { return this.request(`/api/search?${new URLSearchParams(params)}`); }
   media(id) { return this.request(`/api/media/${encodeURIComponent(id)}`); }
   recommendations(id) { return this.request(`/api/media/${encodeURIComponent(id)}/recommendations`); }
-  sources(id, season = 0, episode = 0) { return this.request(`/api/media/${encodeURIComponent(id)}/sources?season=${season}&episode=${episode}`); }
+  sources(id, season = 0, episode = 0, excluded = []) { const params = new URLSearchParams({ season, episode }); excluded.forEach((provider) => params.append("exclude_provider", provider)); return this.request(`/api/media/${encodeURIComponent(id)}/sources?${params}`); }
   availability(id) { return this.request(`/api/media/${encodeURIComponent(id)}/availability`); }
   providerStatus() { return this.request("/api/playback/providers/status"); }
   debugProviders(payload, adminKey) { return this.request("/api/playback/debug", { method: "POST", headers: { "X-Admin-Key": adminKey }, body: JSON.stringify(payload) }); }
   testSources(adminKey) { return this.request("/api/playback/test-sources", { headers: { "X-Admin-Key": adminKey } }); }
+  validateSource(payload, adminKey) { return this.request("/api/playback/validate-source", { method: "POST", headers: { "X-Admin-Key": adminKey }, body: JSON.stringify(payload) }); }
   customSources(adminKey) { return this.request("/api/admin/sources", { headers: { "X-Admin-Key": adminKey } }); }
   addCustomSource(payload, adminKey) { return this.request("/api/admin/sources", { method: "POST", headers: { "X-Admin-Key": adminKey }, body: JSON.stringify(payload) }); }
   toggleCustomSource(id, enabled, adminKey) { return this.request(`/api/admin/sources/${id}?enabled=${enabled}`, { method: "PATCH", headers: { "X-Admin-Key": adminKey } }); }
@@ -52,6 +53,7 @@ export class ApiClient {
   addFavorite(media) { return this.request("/api/user/favorites", { method: "POST", body: JSON.stringify({ media_id: media.id, media_type: media.media_type }) }); }
   removeFavorite(id) { return this.request(`/api/user/favorites/${encodeURIComponent(id)}`, { method: "DELETE" }); }
   saveProgress(payload) { return this.request("/api/playback/progress", { method: "POST", body: JSON.stringify(payload) }); }
+  reportSourceFailure(payload) { return this.request("/api/playback/source-failure", { method: "POST", body: JSON.stringify(payload) }); }
   createRoom(instanceId) { return this.request("/api/rooms", { method: "POST", body: JSON.stringify({ discord_instance_id: instanceId }) }); }
   discordAuth(code) { return this.request("/api/auth/discord", { method: "POST", body: JSON.stringify({ code }) }); }
 }

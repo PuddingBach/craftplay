@@ -4,6 +4,7 @@ import { DiscordActivity } from "./discord/activity.js";
 import { RoomSync } from "./services/room.js";
 import { CraftPlayer } from "./player/player.js";
 import { initSpecialPage } from "./diagnostics.js";
+import { configureJWPlayer } from "./config/jwplayer.js";
 
 const api = new ApiClient();
 const discord = new DiscordActivity(api);
@@ -266,6 +267,7 @@ async function init() {
   if (initSpecialPage(api)) return;
   try {
     const activity = await discord.initialize();
+    configureJWPlayer(activity.config?.jw_player);
     const home = await api.home();
     state.session = { ...activity, user: home.user || activity.user };
     state.sections = home.sections;

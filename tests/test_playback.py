@@ -2,6 +2,7 @@ import pytest
 
 from backend.database import init_db
 from backend.playback.providers.custom import CustomProvider
+from backend.playback.base import PlaybackProvider
 from backend.playback.providers.plenoflu import PlenoFluProvider, build_plenoflu_episode_url, build_plenoflu_movie_url, validate_imdb_id
 from backend.playback.providers.redecanais import RedeCanaisProvider
 from backend.playback.matcher import MediaMatcher
@@ -9,6 +10,7 @@ from backend.playback.registry import ProviderRegistry
 from backend.playback.resolver import PlaybackResolver
 from backend.playback.validation import detect_source_type, is_public_https_url
 from backend.schemas import ExternalIds, MediaItem
+from backend.schemas import PlaybackSource
 
 
 def media(media_id="tmdb:movie:1", media_type="movie"):
@@ -103,7 +105,8 @@ async def test_demo_resolver_returns_validated_legal_sample(monkeypatch):
     sources = await resolver.resolve(item, refresh=True)
     assert sources[0].type == "mp4"
     assert sources[0].is_playable is True
-    assert "media.w3.org" in sources[0].url
+    assert "archive.org" in sources[0].url
+    assert sources[0].metadata["duration"] >= 600
 
 
 @pytest.mark.asyncio
@@ -118,3 +121,15 @@ async def test_episode_keys_do_not_share_cache(monkeypatch):
     episode_sources = await resolver.resolve(item, 1, 1, refresh=True)
     assert movie_sources
     assert episode_sources == []
+
+
+@pytest.mark.asyncio
+async def test_resolver_can_exclude_failed_provider_for_fallback():
+    class FakeProvider(PlaybackProvider):
+        def __init__(self, name, priority): self.name, self.priority = name, priority
+        async def search_sources(self, media, season=0, episode=0): return [{"url": f"https://example.com/{self.name}.mp4"}]
+        async def resolve(self, media, candidate=None, season=0, episode=0):
+            return PlaybackSource(provider=self.name, type="mp4", url=candidate["url"], media_id=media.id, is_playable=True)
+    resolver = PlaybackResolver(providers=[FakeProvider("primary", 100), FakeProvider("fallback", 50)])
+    sources = await resolver.resolve(media(), exclude_providers={"primary"})
+    assert [source.provider for source in sources] == ["fallback"]

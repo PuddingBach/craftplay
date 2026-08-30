@@ -101,6 +101,21 @@ class ProviderDebugRequest(BaseModel):
     episode: int = Field(default=0, ge=0)
 
 
+class SourceValidationRequest(BaseModel):
+    url: str
+    source_type: Literal["hls", "dash", "mp4", "webm"]
+    provider: str = Field(default="debug", max_length=60)
+    quality: str = Field(default="auto", max_length=20)
+
+
+class SourceFailureRequest(BaseModel):
+    media_id: str = Field(min_length=1, max_length=100)
+    provider: str = Field(min_length=1, max_length=60)
+    season: int = Field(default=0, ge=0)
+    episode: int = Field(default=0, ge=0)
+    reason: str = Field(default="PLAYER_ERROR", max_length=100)
+
+
 class FavoriteCreate(BaseModel):
     media_id: str
     media_type: MediaType

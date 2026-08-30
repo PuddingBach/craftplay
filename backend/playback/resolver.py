@@ -45,9 +45,11 @@ class PlaybackResolver:
         language = source.language.casefold()
         return (0 if language.startswith("pt") else 1, QUALITY_ORDER.get(source.quality.casefold(), 6))
 
-    async def resolve(self, media: MediaItem, season: int = 0, episode: int = 0, refresh: bool = False) -> list[PlaybackSource]:
+    async def resolve(self, media: MediaItem, season: int = 0, episode: int = 0, refresh: bool = False,
+                      exclude_providers: set[str] | None = None) -> list[PlaybackSource]:
         now = datetime.now(timezone.utc)
-        if not refresh:
+        excluded = exclude_providers or set()
+        if not refresh and not excluded:
             with SessionLocal() as db:
                 cached = db.scalar(select(PlaybackSourceCache).where(
                     PlaybackSourceCache.media_id == media.id, PlaybackSourceCache.season == season,
@@ -65,7 +67,7 @@ class PlaybackResolver:
             media.tags = list(dict.fromkeys([*media.tags, *(await self.anime_metadata.resolve(media))]))
         sources: list[PlaybackSource] = []
         for provider in self.registry.get_providers():
-            if not provider.can_handle(media):
+            if provider.name in excluded or not provider.can_handle(media):
                 continue
             started = self.registry.timer()
             candidates = await provider.search_sources(media, season, episode)
@@ -89,6 +91,8 @@ class PlaybackResolver:
             top = sources[0]
             log.info("[PLAYBACK] Selected source: %s / %s / %s", top.provider, top.type, top.quality)
         payload = {"version": VALIDATION_VERSION, "items": [item.model_dump(mode="json") for item in sources]}
+        if excluded:
+            return sources
         with SessionLocal() as db:
             cached = db.scalar(select(PlaybackSourceCache).where(
                 PlaybackSourceCache.media_id == media.id, PlaybackSourceCache.season == season,

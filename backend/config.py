@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     playback_cache_ttl_seconds: int = 21600
     playback_validation_timeout: float = 10
     redecanais_provider_enabled: bool = False
+    jw_player_enabled: bool = False
+    jw_player_library_url: str = ""
+    jw_player_license_key: str = ""
     plenoflu_enabled: bool = False
     database_url: str = "sqlite:///./craftplay.db"
     redis_url: str = ""

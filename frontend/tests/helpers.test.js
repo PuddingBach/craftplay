@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { buildPlenoFluEpisodeUrl, buildPlenoFluMovieUrl, validateImdbId } from "../src/services/plenoflu.js";
 import { adapterForSourceType } from "../src/player/controller.js";
+import { configureJWPlayer } from "../src/config/jwplayer.js";
 
 test("URLSearchParams codifica filtros de busca", () => {
   const params = new URLSearchParams({ q: "ficção científica", rating: "8" });
@@ -27,4 +28,12 @@ test("PlayerController seleciona adapters HLS, DASH, WEBM e embed", () => {
     assert.equal(typeof adapterForSourceType(type), "function");
   }
   assert.equal(adapterForSourceType("unknown"), null);
+});
+
+test("JW Player assume mídia direta quando configurado, sem assumir embeds", () => {
+  configureJWPlayer({ enabled: true, library_url: "https://cdn.jwplayer.com/libraries/ABCDEFGH.js" });
+  for (const type of ["hls", "dash", "mp4", "webm"]) assert.equal(adapterForSourceType(type).name, "JWPlayerAdapter");
+  assert.equal(adapterForSourceType("embed").name, "EmbedAdapter");
+  assert.equal(adapterForSourceType("youtube").name, "YouTubeAdapter");
+  configureJWPlayer({ enabled: false });
 });

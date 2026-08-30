@@ -1,4 +1,5 @@
 import { PlayerController } from "./player/controller.js";
+import { configureJWPlayer } from "./config/jwplayer.js";
 
 const escapeHTML = (value = "") => String(value).replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]);
 const sourceRow = (source) => `<li><b>${escapeHTML(source.provider)}</b> · ${escapeHTML(source.type)} · ${escapeHTML(source.quality)}<br><code>${escapeHTML(source.url)}</code> <span class="tag ${source.is_playable ? "" : "gold"}">${source.is_playable ? "reproduzível" : escapeHTML(source.validation || "recusada")}</span></li>`;
@@ -9,8 +10,27 @@ function layout(title, body) {
 
 export function initSpecialPage(api) {
   if (location.pathname === "/debug/providers") { initDebug(api); return true; }
+  if (location.pathname === "/debug/player") { initPlayerDebug(api); return true; }
   if (location.pathname === "/admin/sources") { initAdmin(api); return true; }
   return false;
+}
+
+function initPlayerDebug(api) {
+  layout("Diagnóstico do player", `<p>Teste somente URLs próprias ou oficialmente autorizadas. A fonte será validada pelo backend antes do carregamento.</p><label>Chave administrativa <input id="admin-key" type="password" value="${escapeHTML(sessionStorage.getItem("craftplay_admin_key") || "")}"></label><form id="player-debug-form" class="diagnostic-form"><input name="url" type="url" placeholder="https://..." required><select name="source_type"><option>mp4</option><option>webm</option><option>hls</option><option>dash</option></select><input name="provider" value="debug"><input name="quality" value="auto"><button class="btn btn-primary">VALIDAR E TESTAR</button></form><div id="player-debug-status"></div><div id="player-debug-mount" class="diagnostic-player"></div>`);
+  const key = () => { const value = document.querySelector("#admin-key").value; sessionStorage.setItem("craftplay_admin_key", value); return value; };
+  let controller, timer;
+  api.config().then((config) => configureJWPlayer(config.jw_player));
+  document.querySelector("#player-debug-form").onsubmit = async (event) => {
+    event.preventDefault(); const status = document.querySelector("#player-debug-status"); status.textContent = "Validando fonte...";
+    try {
+      const response = await api.validateSource(Object.fromEntries(new FormData(event.target)), key());
+      if (!response.source.is_playable) throw new Error(response.validation);
+      controller ||= new PlayerController(document.querySelector("#player-debug-mount")); await controller.load(response.source);
+      await controller.play(); clearInterval(timer); timer = setInterval(async () => {
+        status.innerHTML = `<p><b>Engine:</b> ${escapeHTML(controller.getEngine())} · <b>Tipo:</b> ${escapeHTML(response.source.type)} · <b>Estado:</b> ${escapeHTML(controller.getState())} · <b>Posição:</b> ${(await controller.getCurrentTime()).toFixed(1)}s · <b>Duração:</b> ${(await controller.getDuration()).toFixed(1)}s · <b>Buffer:</b> ${controller.getBuffer()}</p>`;
+      }, 500);
+    } catch (error) { status.textContent = `Fonte indisponível: ${error.message}`; }
+  };
 }
 
 function initDebug(api) {

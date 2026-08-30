@@ -66,6 +66,9 @@ ADMIN_API_KEY=gere_uma_chave_administrativa_longa
 PLAYBACK_CACHE_TTL_SECONDS=21600
 PLAYBACK_VALIDATION_TIMEOUT=10
 REDECANAIS_PROVIDER_ENABLED=false
+JW_PLAYER_ENABLED=false
+JW_PLAYER_LIBRARY_URL=https://cdn.jwplayer.com/libraries/SEU_PLAYER_ID.js
+JW_PLAYER_LICENSE_KEY=
 PLENOFLU_ENABLED=false
 DATABASE_URL=postgresql+psycopg://usuario:senha@host:5432/craftplay
 SECRET_KEY=gere-um-valor-aleatorio-longo
@@ -92,6 +95,14 @@ O `ProviderRegistry` registra providers dinamicamente, ordena pela prioridade e 
 O `RedeCanaisProvider` e experimental e permanece desativado por padrao. Os projetos Kodi citados foram usados somente como referencia da separacao pagina -> resolver -> player. Como nao foi encontrada uma API publica documentada com sinal verificavel de autorizacao/licenca, a CraftPlay nao extrai streams, tokens ou URLs internas dessas paginas. Quando ativado sem uma integracao oficialmente autorizada, o provider informa `NO_AUTHORIZED_PUBLIC_API` e o resolver continua no proximo provider.
 
 Para adicionar um provider futuro, implemente `PlaybackProvider`, atribua `name` e `priority`, retorne apenas `PlaybackSource` validado e registre a instancia no `ProviderRegistry`. URLs diretas autorizadas podem usar `MediaResolver`; embeds permitidos podem usar `EmbedResolver`. `HtmlResolver` deliberadamente nao extrai streams de paginas arbitrarias.
+
+### JW/JWX Player
+
+Quando `JW_PLAYER_ENABLED=true` e `JW_PLAYER_LIBRARY_URL` aponta para a biblioteca HTTPS copiada do painel JWX, o `PlayerController` usa `JWPlayerAdapter` como engine principal para HLS, DASH, MP4 e WebM. YouTube, Vimeo e embeds continuam em adapters proprios. Se a biblioteca ou o setup JW falhar, a mesma fonte volta automaticamente para HLS.js, Shaka ou video nativo sem recarregar a pagina.
+
+A biblioteca cloud-hosted ja inclui a licenca e normalmente nao exige `JW_PLAYER_LICENSE_KEY`. Essa segunda variavel existe apenas para uma distribuicao self-hosted licenciada. A chave de player precisa chegar ao navegador e, portanto, nao deve ser confundida com API secret; nunca coloque Management API secrets nessa variavel. Dentro da Discord Activity, adicione no Developer Portal um URL Mapping para o dominio da biblioteca JWX se o console indicar `blocked:csp`.
+
+O player visual da CraftPlay permanece sobre a engine. Botoes, Watch Party e WebSocket falam somente com `PlayerController`, que normaliza play, pause, seek, volume, mute, duracao, estado, buffering, erros e cleanup. Use `/debug/player` para validar uma URL autorizada e conferir engine, tipo, posicao, duracao e buffer.
 
 ## 3. Como obter as chaves
 

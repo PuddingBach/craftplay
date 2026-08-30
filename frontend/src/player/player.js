@@ -14,6 +14,7 @@ export class CraftPlayer {
     Object.assign(this, options);
     this.sources = this.sources || [];
     this.sourceIndex = 0; this.source = this.sources[0] || null; this.remoteUpdate = false; this.lastProgressSave = 0;
+    this.failedProviders = new Set();
     this.render(); this.bindRoom();
   }
 
@@ -48,7 +49,7 @@ export class CraftPlayer {
       await this.controller.load(this.source); this.bindControls();
       this.controller.addEventListener("error", () => this.handlePlaybackError("O navegador recusou ou não conseguiu carregar esta fonte."));
       if (this.controller.getState() === "error") return this.handlePlaybackError("O navegador recusou ou não conseguiu carregar esta fonte.");
-      this.showStatus("● player pronto");
+      this.showStatus(this.controller.lastFallback ? `● fallback ${this.controller.getEngine()}` : `● ${this.controller.getEngine()} pronto`);
     } catch (error) { this.showStatus(`fonte indisponível: ${error.message}`, true); }
   }
 
@@ -75,7 +76,17 @@ export class CraftPlayer {
   moveEpisode(delta) { const select = this.mount.querySelector(".episode-select"); if (!select) return; select.selectedIndex = Math.max(0, Math.min(select.options.length - 1, select.selectedIndex + delta)); select.dispatchEvent(new Event("change")); }
   async control(event, action, extra = {}) { if (!this.roomSync.canControl()) return this.roomSync.send("REQUEST_CONTROL"); try { await action(); if (!["PLAYER_PLAY", "PLAYER_PAUSE"].includes(event)) this.roomSync.send(event, { position: await this.controller?.getCurrentTime() || 0, ...extra }); } catch (error) { this.handlePlaybackError(error.message); } }
 
-  handlePlaybackError(message) { this.showStatus(`fonte indisponível: ${message}`, true); if (this.sources[this.sourceIndex + 1]) setTimeout(() => this.switchSource(this.sourceIndex + 1), 800); }
+  async handlePlaybackError(message) {
+    this.showStatus(`fonte indisponível: ${message}`, true);
+    if (this.source?.provider) this.failedProviders.add(this.source.provider);
+    this.api.reportSourceFailure({ media_id: this.media.id, provider: this.source?.provider || "unknown", season: this.season, episode: this.episode, reason: "PLAYER_ERROR" }).catch(() => {});
+    if (this.sources[this.sourceIndex + 1]) return setTimeout(() => this.switchSource(this.sourceIndex + 1), 800);
+    try {
+      const fallback = await this.api.sources(this.media.id, this.season, this.episode, [...this.failedProviders]);
+      if (fallback.sources?.length) { this.sources.push(...fallback.sources); return setTimeout(() => this.switchSource(this.sourceIndex + 1), 800); }
+    } catch {}
+    this.showStatus("Nenhuma outra fonte compatível foi encontrada.", true);
+  }
 
   bindRoom() {
     this.roomHandler = async ({ detail }) => {
