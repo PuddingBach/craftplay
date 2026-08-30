@@ -11,8 +11,8 @@ const formatTime = (seconds) => {
 const escapeHTML = (value = "") => String(value).replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]);
 
 export class CraftPlayer {
-  constructor({ mount, media, sources, roomSync, api, season = 0, episode = 0, onClose, onEpisode }) {
-    Object.assign(this, { mount, media, sources, roomSync, api, season, episode, onClose, onEpisode });
+  constructor({ mount, media, sources, unavailable = [], roomSync, api, season = 0, episode = 0, onClose, onEpisode }) {
+    Object.assign(this, { mount, media, sources, unavailable, roomSync, api, season, episode, onClose, onEpisode });
     this.sourceIndex = 0;
     this.source = sources[0] || null;
     this.video = null;
@@ -39,7 +39,7 @@ export class CraftPlayer {
         </header>
         <div class="player-stage">
           ${playable ? `<video playsinline preload="metadata" crossorigin="anonymous"></video>` : this.source?.source_type === "EMBED" ? `<iframe src="${this.source.embed_url}" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>` : `
-            <div class="player-empty"><span class="brand-mark">!</span><h2>Nenhuma fonte disponível</h2><p>Este conteúdo está no catálogo, mas nenhuma fonte de reprodução está disponível no momento.</p></div>`}
+            <div class="player-empty"><span class="brand-mark">!</span><h2>Nenhuma fonte disponível</h2><p>${escapeHTML(this.unavailable[0]?.message || "Este conteúdo está no catálogo, mas nenhuma fonte de reprodução está disponível no momento.")}</p></div>`}
           <span class="sync-status">● sincronizando sala</span>
           <div class="control-request hidden"></div>
           ${playable ? this.controlsTemplate() : ""}

@@ -189,6 +189,8 @@ O backend constrói somente os endpoints oficiais `/movie/{IMDb}` ou `/tvshow/{I
 
 Se o iframe não abrir, confirme que o serviço permite `frame-ancestors`/incorporação dentro do Discord. O erro de política do domínio externo não pode ser contornado pela CraftPlay; mantenha o servidor principal disponível.
 
+Antes de listar o PlenoFlu, o backend verifica `X-Frame-Options`, `Content-Security-Policy` e o status HTTP do endpoint. Se o serviço responder com `SAMEORIGIN`, `DENY`, `frame-ancestors 'self'` ou erro HTTP, a fonte não é oferecida e o player exibe um fallback. Para ocultar completamente a integração, defina `PLENOFLU_ENABLED=false`.
+
 ## API principal
 
 | Método | Rota | Uso |

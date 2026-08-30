@@ -20,11 +20,28 @@ def test_plenoflu_builders_reject_arbitrary_values():
 
 
 @pytest.mark.asyncio
-async def test_plenoflu_provider_is_embed_only():
-    sources = await PlenoFluProvider().resolve("tmdb:movie:1", imdb_id="tt1234567", media_type="movie")
+async def test_plenoflu_provider_is_embed_only(monkeypatch):
+    provider = PlenoFluProvider()
+
+    async def allowed(url):
+        return True
+
+    monkeypatch.setattr(provider, "_embed_allowed", allowed)
+    sources = await provider.resolve("tmdb:movie:1", imdb_id="tt1234567", media_type="movie")
     assert len(sources) == 1
     assert sources[0].source_type == "EMBED"
     assert sources[0].stream_url is None
+
+
+@pytest.mark.asyncio
+async def test_plenoflu_is_hidden_when_embedding_is_blocked(monkeypatch):
+    provider = PlenoFluProvider()
+
+    async def blocked(url):
+        return False
+
+    monkeypatch.setattr(provider, "_embed_allowed", blocked)
+    assert await provider.resolve("tmdb:movie:1", imdb_id="tt1234567", media_type="movie") == []
 
 
 @pytest.mark.asyncio

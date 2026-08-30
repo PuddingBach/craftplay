@@ -191,7 +191,7 @@ async function startWatching(id, season = 0, episode = 0) {
     if (!mediaChange()) state.roomSync.addEventListener("open", mediaChange, { once: true });
     state.currentPlayer?.destroy();
     state.currentPlayer = new CraftPlayer({
-      mount: playerMount, media, sources: result.sources, roomSync: state.roomSync, api, season, episode,
+      mount: playerMount, media, sources: result.sources, unavailable: result.unavailable, roomSync: state.roomSync, api, season, episode,
       onClose: () => { state.currentPlayer = null; document.body.classList.remove("modal-open"); loadUserCollections().then(renderCatalog); },
       onEpisode: (nextSeason, nextEpisode) => { state.currentPlayer?.destroy(); startWatching(id, nextSeason, nextEpisode); },
     });

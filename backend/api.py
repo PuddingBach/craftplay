@@ -111,7 +111,15 @@ async def sources(media_id: str, season: int = 0, episode: int = 0, user: User =
     if not item:
         raise HTTPException(status_code=404, detail="Conteúdo não encontrado")
     provider_type = "tv" if item.media_type in {"series", "anime", "cartoon"} else "movie"
-    return {"sources": await playback.resolve(media_id, season, episode, imdb_id=item.external_ids.imdb, media_type=provider_type)}
+    resolved = await playback.resolve(media_id, season, episode, imdb_id=item.external_ids.imdb, media_type=provider_type)
+    unavailable = []
+    settings = get_settings()
+    if settings.plenoflu_enabled and item.external_ids.imdb and not any(source.provider_name == "PlenoFlu" for source in resolved):
+        unavailable.append({
+            "provider_name": "PlenoFlu",
+            "message": "O PlenoFlu recusou a incorporação deste conteúdo. A proteção do serviço foi respeitada e nenhuma tentativa de contorno foi realizada.",
+        })
+    return {"sources": resolved, "unavailable": unavailable}
 
 
 @router.get("/media/{media_id:path}")
