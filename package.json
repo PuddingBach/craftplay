@@ -1,0 +1,21 @@
+{
+  "name": "craftplay",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Discord Activity para assistir conteúdo aberto em grupo",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "test": "node --test frontend/tests/*.test.js"
+  },
+  "dependencies": {
+    "@discord/embedded-app-sdk": "^2.2.0",
+    "hls.js": "^1.6.10",
+    "shaka-player": "^4.15.9"
+  },
+  "devDependencies": {
+    "vite": "^7.1.3"
+  }
+}

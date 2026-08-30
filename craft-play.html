@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Craft Play — Filmes, séries, desenhos e animes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#050710;
+    --bg-elev:#0b0f1c;
+    --bg-elev-2:#101528;
+    --border:rgba(255,255,255,.08);
+    --border-soft:rgba(255,255,255,.05);
+    --text:#eef1f8;
+    --text-muted:#8991ab;
+    --text-dim:#5c637c;
+    --blue:#2f8fff;
+    --blue-deep:#1c4fd8;
+    --purple:#8a3ffc;
+    --purple-deep:#4a1fb8;
+    --grad: linear-gradient(135deg, var(--blue) 0%, var(--purple) 100%);
+    --grad-soft: linear-gradient(135deg, rgba(47,143,255,.16), rgba(138,63,252,.16));
+    --radius: 14px;
+    --shadow-glow: 0 0 40px rgba(90,80,255,.18);
+  }
+
+  *{ box-sizing:border-box; }
+  html{ scroll-behavior:smooth; }
+  body{
+    margin:0;
+    background:
+      radial-gradient(1100px 600px at 85% -10%, rgba(138,63,252,.16), transparent 60%),
+      radial-gradient(900px 500px at -10% 10%, rgba(47,143,255,.12), transparent 55%),
+      var(--bg);
+    color:var(--text);
+    font-family:'Manrope', sans-serif;
+    min-height:100vh;
+  }
+  h1,h2,h3, .display{ font-family:'Rajdhani', sans-serif; letter-spacing:.02em; }
+  .mono{ font-family:'JetBrains Mono', monospace; }
+  a{ color:inherit; text-decoration:none; }
+  button{ font-family:inherit; cursor:pointer; }
+  ::selection{ background:var(--purple); color:#fff; }
+
+  /* scrollbar */
+  ::-webkit-scrollbar{ height:8px; width:8px; }
+  ::-webkit-scrollbar-thumb{ background:linear-gradient(var(--blue),var(--purple)); border-radius:8px; }
+  ::-webkit-scrollbar-track{ background:transparent; }
+
+  /* ---------- header ---------- */
+  header{
+    position:sticky; top:0; z-index:50;
+    display:flex; align-items:center; gap:28px;
+    padding:16px clamp(18px,4vw,52px);
+    background:rgba(5,7,16,.78);
+    backdrop-filter:blur(14px);
+    border-bottom:1px solid var(--border-soft);
+  }
+  .logo{ display:flex; align-items:center; gap:10px; flex-shrink:0; }
+  .logo svg{ width:38px; height:38px; }
+  .logo-text{ display:flex; flex-direction:column; line-height:1; }
+  .logo-text .name{ font-size:20px; font-weight:700; }
+  .logo-text .name .play{
+    background:var(--grad); -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  .logo-text .tag{ font-family:'JetBrains Mono',monospace; font-size:9px; color:var(--text-dim); letter-spacing:.08em; text-transform:uppercase; }
+
+  nav{ display:flex; gap:22px; flex:1; }
+  nav a{
+    font-size:14px; font-weight:600; color:var(--text-muted);
+    padding:6px 2px; position:relative; transition:color .2s ease;
+  }
+  nav a::after{
+    content:''; position:absolute; left:0; right:0; bottom:-4px; height:2px;
+    background:var(--grad); transform:scaleX(0); transform-origin:left; transition:transform .25s ease;
+  }
+  nav a:hover, nav a.active{ color:var(--text); }
+  nav a:hover::after, nav a.active::after{ transform:scaleX(1); }
+
+  .search-wrap{
+    display:flex; align-items:center; gap:8px;
+    background:var(--bg-elev); border:1px solid var(--border);
+    border-radius:10px; padding:8px 12px; width:min(320px, 34vw);
+    transition:border-color .2s ease, box-shadow .2s ease;
+  }
+  .search-wrap:focus-within{ border-color:var(--purple); box-shadow:0 0 0 3px rgba(138,63,252,.15); }
+  .search-wrap .prompt{ color:var(--blue); font-family:'JetBrains Mono',monospace; font-size:13px; }
+  .search-wrap input{
+    background:none; border:none; outline:none; color:var(--text); font-size:14px; width:100%;
+    font-family:'Manrope',sans-serif;
+  }
+  .search-wrap input::placeholder{ color:var(--text-dim); }
+
+  .burger{ display:none; background:none; border:1px solid var(--border); color:var(--text); border-radius:8px; padding:8px 10px; }
+
+  /* ---------- hero ---------- */
+  .hero{
+    position:relative;
+    margin:22px clamp(14px,3.5vw,44px) 0;
+    border-radius:22px;
+    overflow:hidden;
+    min-height:min(62vh, 460px);
+    display:flex; align-items:flex-end;
+    border:1px solid var(--border-soft);
+  }
+  .hero-bg{ position:absolute; inset:0; z-index:0; }
+  .hero-content{
+    position:relative; z-index:2; padding:clamp(22px,4vw,56px);
+    max-width:640px;
+  }
+  .hero-eyebrow{
+    font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--blue);
+    display:inline-flex; align-items:center; gap:8px; margin-bottom:14px;
+    background:rgba(47,143,255,.1); border:1px solid rgba(47,143,255,.3);
+    padding:4px 10px; border-radius:20px;
+  }
+  .hero-eyebrow .dot{ width:6px; height:6px; border-radius:50%; background:var(--blue); animation:pulse 1.8s infinite; }
+  @keyframes pulse{ 0%,100%{ opacity:1; } 50%{ opacity:.3; } }
+  .hero h1{ font-size:clamp(30px,5vw,54px); margin:0 0 12px; font-weight:700; line-height:1.02; }
+  .hero .meta-row{ display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px; }
+  .hero p.syn{ color:var(--text-muted); font-size:15.5px; line-height:1.6; margin:0 0 22px; }
+  .hero .cta-row{ display:flex; gap:12px; flex-wrap:wrap; }
+
+  .btn{
+    border:none; border-radius:10px; padding:12px 22px; font-weight:700; font-size:14px;
+    display:inline-flex; align-items:center; gap:8px; transition:transform .15s ease, box-shadow .2s ease;
+  }
+  .btn:active{ transform:scale(.97); }
+  .btn-primary{ background:var(--grad); color:#fff; box-shadow:0 8px 24px rgba(90,70,255,.35); }
+  .btn-primary:hover{ box-shadow:0 10px 30px rgba(90,70,255,.5); }
+  .btn-ghost{ background:rgba(255,255,255,.06); color:var(--text); border:1px solid var(--border); }
+  .btn-ghost:hover{ background:rgba(255,255,255,.1); }
+  .btn .mono{ opacity:.7; font-size:12px; }
+
+  /* ---------- tag pills (código motif) ---------- */
+  .tag{
+    font-family:'JetBrains Mono',monospace; font-size:11.5px; color:var(--blue);
+    background:rgba(47,143,255,.08); border:1px solid rgba(47,143,255,.25);
+    padding:3px 9px; border-radius:6px; white-space:nowrap;
+  }
+  .tag.purple{ color:#c9a3ff; background:rgba(138,63,252,.1); border-color:rgba(138,63,252,.3); }
+  .tag.type{ color:#ffd48a; background:rgba(255,180,60,.08); border-color:rgba(255,180,60,.25); }
+
+  /* ---------- filters ---------- */
+  .filters{
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    padding:26px clamp(14px,3.5vw,44px) 6px;
+  }
+  .chip-group{ display:flex; gap:8px; flex-wrap:wrap; }
+  .chip{
+    font-size:13.5px; font-weight:600; color:var(--text-muted);
+    background:var(--bg-elev); border:1px solid var(--border);
+    padding:8px 16px; border-radius:30px; transition:all .2s ease;
+  }
+  .chip:hover{ color:var(--text); border-color:var(--border); }
+  .chip.active{ background:var(--grad); color:#fff; border-color:transparent; }
+
+  select.filter-select{
+    background:var(--bg-elev); color:var(--text-muted); border:1px solid var(--border);
+    border-radius:30px; padding:8px 14px; font-size:13.5px; font-weight:600; font-family:inherit;
+    outline:none; cursor:pointer;
+  }
+  select.filter-select:focus{ border-color:var(--purple); color:var(--text); }
+  .filters .spacer{ flex:1; }
+  .result-count{ font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--text-dim); }
+
+  /* ---------- rows / grid ---------- */
+  main{ padding-bottom:60px; }
+  .row{ margin-top:34px; }
+  .row-head{
+    display:flex; align-items:baseline; gap:10px;
+    padding:0 clamp(14px,3.5vw,44px); margin-bottom:14px;
+  }
+  .row-head h2{ font-size:20px; margin:0; font-weight:700; }
+  .row-head .count{ color:var(--text-dim); font-family:'JetBrains Mono',monospace; font-size:12px; }
+
+  .track{
+    display:flex; gap:16px; overflow-x:auto; padding:4px clamp(14px,3.5vw,44px) 18px;
+    scroll-snap-type:x proximity;
+  }
+  .grid{
+    display:grid; grid-template-columns:repeat(auto-fill, minmax(170px,1fr));
+    gap:18px; padding:4px clamp(14px,3.5vw,44px) 18px;
+  }
+
+  .card{
+    position:relative; flex:0 0 170px; scroll-snap-align:start;
+    border-radius:12px; overflow:hidden; cursor:pointer;
+    border:1px solid var(--border-soft);
+    background:var(--bg-elev);
+    transition:transform .25s ease, box-shadow .25s ease, border-color .25s ease;
+  }
+  .grid .card{ flex-basis:auto; }
+  .card:hover{ transform:translateY(-6px); box-shadow:var(--shadow-glow); border-color:rgba(138,63,252,.4); z-index:2; }
+  .card:focus-visible{ outline:2px solid var(--purple); outline-offset:2px; }
+
+  .poster{
+    height:238px; position:relative; display:flex; align-items:center; justify-content:center;
+    font-size:52px;
+  }
+  .poster .icon{ filter:drop-shadow(0 6px 18px rgba(0,0,0,.5)); }
+  .poster .cardtag{
+    position:absolute; top:8px; left:8px; font-family:'JetBrains Mono',monospace;
+    font-size:9.5px; padding:3px 7px; border-radius:5px; background:rgba(5,7,16,.55);
+    backdrop-filter:blur(4px); color:#fff; border:1px solid rgba(255,255,255,.15);
+  }
+  .poster .rating{
+    position:absolute; top:8px; right:8px; font-family:'JetBrains Mono',monospace;
+    font-size:10.5px; padding:3px 7px; border-radius:5px; background:rgba(5,7,16,.55);
+    backdrop-filter:blur(4px); color:#ffd166; border:1px solid rgba(255,255,255,.15);
+  }
+  .card-info{ padding:10px 12px 12px; }
+  .card-info .title{ font-size:13.5px; font-weight:700; margin:0 0 4px; line-height:1.25;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .card-info .sub{ font-size:11px; color:var(--text-dim); font-family:'JetBrains Mono',monospace; }
+
+  .empty-state{
+    text-align:center; padding:70px 20px; color:var(--text-muted);
+  }
+  .empty-state .glyph{ font-size:44px; margin-bottom:14px; opacity:.7; }
+  .empty-state h3{ margin:0 0 8px; font-size:20px; }
+  .empty-state p{ font-family:'JetBrains Mono',monospace; font-size:13px; color:var(--text-dim); margin:0; }
+
+  /* ---------- modal ---------- */
+  .modal-backdrop{
+    position:fixed; inset:0; background:rgba(2,3,8,.78); backdrop-filter:blur(6px);
+    display:none; align-items:center; justify-content:center; z-index:100; padding:20px;
+  }
+  .modal-backdrop.open{ display:flex; }
+  .modal{
+    background:var(--bg-elev-2); border:1px solid var(--border); border-radius:20px;
+    max-width:760px; width:100%; max-height:88vh; overflow-y:auto; position:relative;
+    box-shadow:0 30px 80px rgba(0,0,0,.6);
+  }
+  .modal-hero{
+    height:230px; position:relative; display:flex; align-items:flex-end;
+  }
+  .modal-hero .icon-bg{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:110px; opacity:.9; }
+  .modal-hero::after{ content:''; position:absolute; inset:0; background:linear-gradient(to top, var(--bg-elev-2) 5%, transparent 75%); }
+  .modal-close{
+    position:absolute; top:14px; right:14px; z-index:5; width:36px; height:36px; border-radius:50%;
+    background:rgba(5,7,16,.6); border:1px solid var(--border); color:#fff; font-size:16px;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .modal-close:hover{ background:rgba(5,7,16,.9); }
+  .modal-body{ padding:6px 30px 34px; position:relative; z-index:2; }
+  .modal-body h2{ font-size:28px; margin:0 0 10px; }
+  .modal-meta{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
+  .modal-body .syn-label{ font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--blue); margin-bottom:6px; display:block; }
+  .modal-body p.synopsis{ color:var(--text-muted); line-height:1.7; font-size:15px; margin:0 0 22px; }
+  .cast{ display:flex; gap:10px; flex-wrap:wrap; margin-bottom:24px; }
+  .cast .who{ font-size:12.5px; color:var(--text-muted); background:rgba(255,255,255,.04); border:1px solid var(--border); padding:6px 12px; border-radius:8px; }
+  .modal-actions{ display:flex; gap:12px; flex-wrap:wrap; }
+
+  /* ---------- footer ---------- */
+  footer{
+    border-top:1px solid var(--border-soft); padding:34px clamp(14px,3.5vw,44px);
+    display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px;
+  }
+  footer .tagline{ font-size:12.5px; color:var(--text-dim); font-family:'JetBrains Mono',monospace; }
+  footer .fbrand{ display:flex; align-items:center; gap:8px; }
+  footer .fbrand svg{ width:22px; height:22px; }
+
+  @media (prefers-reduced-motion: reduce){
+    *{ animation:none !important; transition:none !important; scroll-behavior:auto !important; }
+  }
+
+  @media (max-width: 880px){
+    nav{ display:none; }
+    .burger{ display:block; }
+    .search-wrap{ width:100%; order:3; }
+    header{ flex-wrap:wrap; gap:12px; }
+  }
+  @media (max-width: 520px){
+    .poster{ height:190px; font-size:40px; }
+    .card{ flex-basis:130px; }
+    .hero{ min-height:52vh; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <svg viewBox="0 0 100 100" fill="none">
+      <defs>
+        <linearGradient id="lg" x1="0" y1="0" x2="100" y2="100">
+          <stop offset="0%" stop-color="#2f8fff"/>
+          <stop offset="100%" stop-color="#8a3ffc"/>
+        </linearGradient>
+      </defs>
+      <path d="M78 22 C60 8, 32 12, 20 32 C10 49, 12 66, 24 78 C36 90, 60 92, 78 78"
+            stroke="url(#lg)" stroke-width="13" stroke-linecap="round" fill="none"/>
+      <text x="50" y="57" font-family="JetBrains Mono, monospace" font-size="22" fill="#fff" text-anchor="middle" font-weight="700">&lt;/&gt;</text>
+    </svg>
+    <div class="logo-text">
+      <span class="name">craft<span class="play">play</span></span>
+      <span class="tag">criamos soluções · construímos o futuro</span>
+    </div>
+  </div>
+
+  <nav id="mainNav">
+    <a href="#" class="nav-link active" data-cat="todos">Início</a>
+    <a href="#" class="nav-link" data-cat="filme">Filmes</a>
+    <a href="#" class="nav-link" data-cat="serie">Séries</a>
+    <a href="#" class="nav-link" data-cat="desenho">Desenhos</a>
+    <a href="#" class="nav-link" data-cat="anime">Animes</a>
+  </nav>
+
+  <div class="search-wrap">
+    <span class="prompt">&gt;</span>
+    <input id="searchInput" type="text" placeholder="buscar_titulo()" autocomplete="off">
+  </div>
+
+  <button class="burger" id="burgerBtn">☰</button>
+</header>
+
+<section class="hero" id="hero"></section>
+
+<div class="filters">
+  <div class="chip-group" id="catChips">
+    <button class="chip active" data-cat="todos">Todos</button>
+    <button class="chip" data-cat="filme">Filmes</button>
+    <button class="chip" data-cat="serie">Séries</button>
+    <button class="chip" data-cat="desenho">Desenhos</button>
+    <button class="chip" data-cat="anime">Animes</button>
+  </div>
+
+  <select class="filter-select" id="genreSelect">
+    <option value="todos">Gênero: todos</option>
+  </select>
+
+  <select class="filter-select" id="yearSelect">
+    <option value="todos">Ano: todos</option>
+  </select>
+
+  <select class="filter-select" id="sortSelect">
+    <option value="relevancia">Ordenar: relevância</option>
+    <option value="rating">Ordenar: nota</option>
+    <option value="recentes">Ordenar: mais recentes</option>
+    <option value="az">Ordenar: A–Z</option>
+  </select>
+
+  <div class="spacer"></div>
+  <span class="result-count" id="resultCount"></span>
+</div>
+
+<main id="main"></main>
+
+<footer>
+  <div class="fbrand">
+    <svg viewBox="0 0 100 100" fill="none">
+      <path d="M78 22 C60 8, 32 12, 20 32 C10 49, 12 66, 24 78 C36 90, 60 92, 78 78"
+            stroke="url(#lg)" stroke-width="13" stroke-linecap="round" fill="none"/>
+    </svg>
+    <span class="tagline">craft play — um produto do ecossistema craft systems</span>
+  </div>
+  <span class="tagline">© 2026 craft systems — conteúdo de demonstração, sem vínculo com obras reais</span>
+</footer>
+
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="modal" id="modalBox"></div>
+</div>
+
+<script>
+/* ============ DADOS (fictícios, apenas para demonstração de layout) ============ */
+const ICONS = ["🚀","🐉","🕵️","👻","⚔️","🎭","🧙","🏴‍☠️","🛸","🦖","🎌","🧛","🤖","🎬","🐺","🔮","🌌","🥷","🧟","🏹","🎃","🐾","🚁","🗡️"];
+const GRADIENTS = [
+  ["#1c4fd8","#8a3ffc"], ["#2f8fff","#4a1fb8"], ["#0891b2","#6d28d9"],
+  ["#1d4ed8","#c026d3"], ["#0e7490","#4338ca"], ["#3730a3","#a21caf"],
+  ["#1e3a8a","#7e22ce"], ["#155e75","#5b21b6"]
+];
+
+function grad(i){ const [a,b] = GRADIENTS[i % GRADIENTS.length]; return `linear-gradient(150deg, ${a}, ${b})`; }
+
+const TITLES = [
+  {t:"Órbita Zero", cat:"filme", genres:["ficção científica","aventura"], year:2025, rating:8.7, runtime:"2h 08min", syn:"Uma engenheira é enviada à última estação orbital antes de seu descomissionamento e descobre um sinal que pode reescrever tudo o que a humanidade sabe sobre o espaço profundo."},
+  {t:"O Círculo de Vidro", cat:"filme", genres:["drama","suspense"], year:2023, rating:7.9, runtime:"1h 54min", syn:"Um mediador de conflitos familiares aceita um último caso que o obriga a confrontar segredos que ele mesmo ajudou a enterrar décadas atrás."},
+  {t:"Ronin do Asfalto", cat:"filme", genres:["ação"], year:2024, rating:8.2, runtime:"1h 47min", syn:"Um ex-piloto de corridas ilegais volta às ruas para proteger a única testemunha de um esquema que envolve a elite da cidade."},
+  {t:"Nas Entrelinhas", cat:"filme", genres:["romance","drama"], year:2022, rating:7.4, runtime:"2h 02min", syn:"Dois revisores de uma editora trocam cartas anônimas sobre os manuscritos que leem, sem saber que trabalham na mesma sala."},
+  {t:"Vazio Sideral", cat:"filme", genres:["terror","ficção científica"], year:2026, rating:8.0, runtime:"1h 41min", syn:"A tripulação de uma sonda de mineração perde contato com a Terra após capturar algo que não deveria estar vivo."},
+  {t:"A Última Colheita", cat:"filme", genres:["drama"], year:2021, rating:8.5, runtime:"2h 15min", syn:"Uma família de agricultores enfrenta a seca mais severa em gerações enquanto decide o destino de uma terra que passou por cinco gerações."},
+  {t:"Código Sombra", cat:"filme", genres:["ação","suspense"], year:2025, rating:7.6, runtime:"1h 58min", syn:"Uma analista de segurança descobre uma falha usada para manipular eleições em três países e tem 48 horas para expô-la."},
+  {t:"Fronteira Azul", cat:"filme", genres:["aventura"], year:2020, rating:7.1, runtime:"1h 49min", syn:"Um grupo de cartógrafos amadores tenta provar a existência de uma ilha que aparece em apenas um mapa antigo."},
+
+  {t:"Protocolo Helix", cat:"serie", genres:["ficção científica","suspense"], year:2024, rating:9.0, seasons:"3 temporadas", syn:"Uma equipe de cientistas cria uma inteligência que aprende rápido demais — e passa a tomar decisões que ninguém autorizou."},
+  {t:"Cidade Submersa", cat:"serie", genres:["drama","suspense"], year:2023, rating:8.4, seasons:"2 temporadas", syn:"Em uma metrópole reconstruída após a subida do nível do mar, uma detetive investiga desaparecimentos ligados ao antigo centro afogado."},
+  {t:"Casa Corvo", cat:"serie", genres:["drama","mistério"], year:2022, rating:8.8, seasons:"4 temporadas", syn:"Três irmãos herdam a mansão da família e, com ela, dívidas, segredos e um testamento que só faz sentido se um deles desaparecer."},
+  {t:"Setor 9", cat:"serie", genres:["ação","ficção científica"], year:2025, rating:8.1, seasons:"1 temporada", syn:"Agentes de uma unidade secreta lidam com tecnologia alienígena recuperada décadas atrás e agora prestes a vazar."},
+  {t:"Recreio Eterno", cat:"serie", genres:["comédia","drama"], year:2021, rating:7.7, seasons:"5 temporadas", syn:"Professores de uma escola pública tentam manter a sanidade — e o emprego — em meio a reformas educacionais absurdas."},
+  {t:"Linha de Sangue", cat:"serie", genres:["drama","suspense"], year:2020, rating:8.3, seasons:"3 temporadas", syn:"O patriarca de uma vinícola centenária morre em circunstâncias suspeitas, e cada herdeiro tem um motivo — e um álibi furado."},
+  {t:"Ártico 88", cat:"serie", genres:["suspense","terror"], year:2026, rating:7.9, seasons:"1 temporada", syn:"Uma base de pesquisa isolada perde comunicação com o mundo exatamente quando um novo tipo de gelo começa a se formar por dentro."},
+  {t:"Mesa 12", cat:"serie", genres:["comédia"], year:2023, rating:7.3, seasons:"2 temporadas", syn:"A rotina caótica de um restaurante familiar visto pelos olhos de quem trabalha na pior mesa da casa."},
+
+  {t:"Reino de Ferrugem", cat:"desenho", genres:["aventura","fantasia"], year:2024, rating:8.6, seasons:"2 temporadas", syn:"Em um reino construído sobre as ruínas de máquinas antigas, uma jovem mecânica descobre que pode ouvir os robôs adormecidos."},
+  {t:"Turma da Órbita", cat:"desenho", genres:["comédia","ficção científica"], year:2022, rating:7.8, seasons:"3 temporadas", syn:"Cinco alunos de uma escola espacial itinerante colecionam confusões em cada planeta que a nave visita."},
+  {t:"Vovó Tempestade", cat:"desenho", genres:["aventura","comédia"], year:2021, rating:8.0, seasons:"1 temporada", syn:"Uma avó aposentada descobre um poder de controlar o clima e decide usar isso para, finalmente, vencer o quintal do vizinho."},
+  {t:"O Bosque de Lata", cat:"desenho", genres:["fantasia"], year:2025, rating:8.9, seasons:"2 temporadas", syn:"Criaturas feitas de sucata se reúnem todo outono para reconstruir a floresta que a cidade abandonou."},
+  {t:"Patrulha do Recreio", cat:"desenho", genres:["comédia","ação"], year:2020, rating:7.2, seasons:"4 temporadas", syn:"Um grupo de crianças se autodenomina protetor do pátio da escola contra ameaças completamente inventadas — só que dessa vez uma é real."},
+  {t:"Estrelas de Papel", cat:"desenho", genres:["drama","fantasia"], year:2023, rating:8.4, seasons:"1 temporada", syn:"Um menino que só consegue se expressar através de origamis encontra uma dobradura que ganha vida e o ajuda a atravessar o luto."},
+
+  {t:"Lâmina Carmesim", cat:"anime", genres:["ação","fantasia"], year:2024, rating:9.1, seasons:"3 temporadas", syn:"Uma espadachim exilada precisa reunir os quatro fragmentos de sua lâmina antes que o clã que a baniu domine as terras do norte."},
+  {t:"Neon Requiem", cat:"anime", genres:["ficção científica","ação"], year:2025, rating:9.3, seasons:"2 temporadas", syn:"Em uma metrópole controlada por corporações de memória, uma hacker vende lembranças roubadas até encontrar uma que não deveria existir."},
+  {t:"Colégio das Marés", cat:"anime", genres:["romance","comédia"], year:2022, rating:8.2, seasons:"1 temporada", syn:"Um estudante transferido para uma escola à beira-mar precisa lidar com um clube de natação, um rival teimoso e sentimentos confusos."},
+  {t:"Espírito de Ferro", cat:"anime", genres:["fantasia","drama"], year:2021, rating:8.7, seasons:"2 temporadas", syn:"Um ferreiro descobre que cada lâmina que forja aprisiona um espírito — e uma delas se recusa a ficar em silêncio."},
+  {t:"Dez Mil Léguas", cat:"anime", genres:["aventura","fantasia"], year:2026, rating:8.9, seasons:"1 temporada", syn:"A tripulação de um submarino voador cartografa territórios que desafiam toda a geografia conhecida em busca da cidade perdida de Val."},
+  {t:"Academia Fantasma", cat:"anime", genres:["terror","comédia"], year:2020, rating:7.6, seasons:"2 temporadas", syn:"Uma escola só aceita alunos que já morreram uma vez — e a nova matriculada não faz ideia de como isso aconteceu com ela."},
+  {t:"Punho de Vidro", cat:"anime", genres:["ação","drama"], year:2023, rating:8.5, seasons:"3 temporadas", syn:"Um lutador amador com um braço mecânico frágil sobe ao torneio mais violento do continente para pagar a dívida do irmão."},
+];
+
+const DATA = TITLES.map((d, i) => ({
+  id:i,
+  icon:ICONS[i % ICONS.length],
+  gradient:grad(i),
+  ...d
+}));
+
+const CAT_LABEL = { filme:"Filme", serie:"Série", desenho:"Desenho", anime:"Anime" };
+const CAT_LABEL_PLURAL = { todos:"Em destaque", filme:"Filmes", serie:"Séries", desenho:"Desenhos animados", anime:"Animes" };
+
+/* ============ ESTADO ============ */
+const state = { cat:"todos", genre:"todos", year:"todos", sort:"relevancia", query:"" };
+
+/* ============ HELPERS ============ */
+function allGenres(){
+  const s = new Set();
+  DATA.forEach(d => d.genres.forEach(g => s.add(g)));
+  return [...s].sort();
+}
+function allYears(){
+  return [...new Set(DATA.map(d => d.year))].sort((a,b)=>b-a);
+}
+function matches(d){
+  if(state.cat !== "todos" && d.cat !== state.cat) return false;
+  if(state.genre !== "todos" && !d.genres.includes(state.genre)) return false;
+  if(state.year !== "todos" && String(d.year) !== state.year) return false;
+  if(state.query){
+    const q = state.query.toLowerCase();
+    if(!d.t.toLowerCase().includes(q) && !d.genres.join(" ").toLowerCase().includes(q)) return false;
+  }
+  return true;
+}
+function sortList(list){
+  const l = [...list];
+  if(state.sort === "rating") l.sort((a,b)=>b.rating-a.rating);
+  else if(state.sort === "recentes") l.sort((a,b)=>b.year-a.year);
+  else if(state.sort === "az") l.sort((a,b)=>a.t.localeCompare(b.t));
+  return l;
+}
+function metaLine(d){
+  return `${d.year} · ${d.cat==="filme" ? d.runtime : d.seasons}`;
+}
+
+/* ============ RENDER: FILTROS ============ */
+function initFilters(){
+  const genreSelect = document.getElementById('genreSelect');
+  allGenres().forEach(g=>{
+    const opt = document.createElement('option');
+    opt.value = g; opt.textContent = "Gênero: " + g.charAt(0).toUpperCase()+g.slice(1);
+    genreSelect.appendChild(opt);
+  });
+  const yearSelect = document.getElementById('yearSelect');
+  allYears().forEach(y=>{
+    const opt = document.createElement('option');
+    opt.value = y; opt.textContent = "Ano: " + y;
+    yearSelect.appendChild(opt);
+  });
+}
+
+/* ============ RENDER: HERO ============ */
+function renderHero(){
+  const featured = DATA.reduce((a,b)=> b.rating > a.rating ? b : a);
+  const hero = document.getElementById('hero');
+  hero.innerHTML = `
+    <div class="hero-bg" style="background:${featured.gradient}"></div>
+    <div class="hero-bg" style="background:linear-gradient(0deg, rgba(5,7,16,.96), rgba(5,7,16,.35) 55%, rgba(5,7,16,.15));"></div>
+    <div class="hero-content">
+      <span class="hero-eyebrow"><span class="dot"></span> destaque_do_catálogo</span>
+      <h1>${featured.t}</h1>
+      <div class="meta-row">
+        <span class="tag type">${CAT_LABEL[featured.cat]}</span>
+        <span class="tag">★ ${featured.rating.toFixed(1)}</span>
+        <span class="tag purple">${featured.year}</span>
+        ${featured.genres.map(g=>`<span class="tag">${g}</span>`).join("")}
+      </div>
+      <p class="syn">${featured.syn}</p>
+      <div class="cta-row">
+        <button class="btn btn-primary" onclick="openModal(${featured.id})">▶ Assistir <span class="mono">play()</span></button>
+        <button class="btn btn-ghost" onclick="openModal(${featured.id})">+ Minha Lista</button>
+      </div>
+    </div>
+  `;
+}
+
+/* ============ RENDER: CARD ============ */
+function cardHTML(d){
+  return `
+    <article class="card" tabindex="0" onclick="openModal(${d.id})" onkeydown="if(event.key==='Enter')openModal(${d.id})">
+      <div class="poster" style="background:${d.gradient}">
+        <span class="cardtag">&lt;${d.cat}/&gt;</span>
+        <span class="rating">★ ${d.rating.toFixed(1)}</span>
+        <span class="icon">${d.icon}</span>
+      </div>
+      <div class="card-info">
+        <p class="title">${d.t}</p>
+        <span class="sub">${metaLine(d)}</span>
+      </div>
+    </article>
+  `;
+}
+
+/* ============ RENDER: MAIN ============ */
+function render(){
+  const main = document.getElementById('main');
+  const filtered = sortList(DATA.filter(matches));
+  document.getElementById('resultCount').textContent = `${filtered.length} título(s) · consulta()`;
+
+  const filtersActive = state.query || state.genre !== "todos" || state.year !== "todos" || state.sort !== "relevancia";
+
+  if(filtered.length === 0){
+    main.innerHTML = `
+      <div class="empty-state">
+        <div class="glyph">◌</div>
+        <h3>Nenhum resultado encontrado</h3>
+        <p>&gt; catálogo.buscar("${state.query || ''}") → []</p>
+      </div>`;
+    return;
+  }
+
+  if(filtersActive || state.cat !== "todos" && (state.genre!=="todos"||state.year!=="todos")){
+    main.innerHTML = `
+      <div class="row">
+        <div class="row-head"><h2>${CAT_LABEL_PLURAL[state.cat] || "Resultados"}</h2><span class="count">${filtered.length} itens</span></div>
+        <div class="grid">${filtered.map(cardHTML).join("")}</div>
+      </div>`;
+    return;
+  }
+
+  // modo padrão: carrosséis por categoria
+  const cats = state.cat === "todos" ? ["filme","serie","desenho","anime"] : [state.cat];
+  main.innerHTML = cats.map(cat=>{
+    const items = sortList(DATA.filter(d=>d.cat===cat));
+    if(!items.length) return "";
+    return `
+      <div class="row">
+        <div class="row-head"><h2>${CAT_LABEL_PLURAL[cat]}</h2><span class="count">${items.length} itens</span></div>
+        <div class="track">${items.map(cardHTML).join("")}</div>
+      </div>`;
+  }).join("");
+}
+
+/* ============ MODAL ============ */
+function openModal(id){
+  const d = DATA.find(x=>x.id===id);
+  const backdrop = document.getElementById('modalBackdrop');
+  document.getElementById('modalBox').innerHTML = `
+    <div class="modal-hero" style="background:${d.gradient}">
+      <div class="icon-bg">${d.icon}</div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <h2>${d.t}</h2>
+      <div class="modal-meta">
+        <span class="tag type">${CAT_LABEL[d.cat]}</span>
+        <span class="tag">★ ${d.rating.toFixed(1)}</span>
+        <span class="tag purple">${d.year}</span>
+        <span class="tag">${d.cat==="filme" ? d.runtime : d.seasons}</span>
+        ${d.genres.map(g=>`<span class="tag">${g}</span>`).join("")}
+      </div>
+      <span class="syn-label">&gt; sinopse</span>
+      <p class="synopsis">${d.syn}</p>
+      <span class="syn-label">&gt; elenco (demonstração)</span>
+      <div class="cast">
+        ${["Nara Vieira","Théo Bastos","Ícaro Mendonça","Sol Almeida"].map(n=>`<span class="who">${n}</span>`).join("")}
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-primary" onclick="closeModal()">▶ Assistir <span class="mono">play()</span></button>
+        <button class="btn btn-ghost" onclick="closeModal()">+ Minha Lista</button>
+      </div>
+    </div>
+  `;
+  backdrop.classList.add('open');
+}
+function closeModal(){ document.getElementById('modalBackdrop').classList.remove('open'); }
+
+document.getElementById('modalBackdrop').addEventListener('click', e=>{
+  if(e.target.id === 'modalBackdrop') closeModal();
+});
+document.addEventListener('keydown', e=>{ if(e.key === 'Escape') closeModal(); });
+
+/* ============ EVENTOS DE FILTRO ============ */
+function setActiveCat(cat){
+  state.cat = cat;
+  document.querySelectorAll('.chip[data-cat]').forEach(c=>c.classList.toggle('active', c.dataset.cat===cat));
+  document.querySelectorAll('.nav-link').forEach(a=>a.classList.toggle('active', a.dataset.cat===cat));
+  render();
+}
+document.getElementById('catChips').addEventListener('click', e=>{
+  const btn = e.target.closest('.chip');
+  if(btn) setActiveCat(btn.dataset.cat);
+});
+document.getElementById('mainNav').addEventListener('click', e=>{
+  const a = e.target.closest('.nav-link');
+  if(a){ e.preventDefault(); setActiveCat(a.dataset.cat); }
+});
+document.getElementById('genreSelect').addEventListener('change', e=>{ state.genre = e.target.value; render(); });
+document.getElementById('yearSelect').addEventListener('change', e=>{ state.year = e.target.value; render(); });
+document.getElementById('sortSelect').addEventListener('change', e=>{ state.sort = e.target.value; render(); });
+
+let debounce;
+document.getElementById('searchInput').addEventListener('input', e=>{
+  clearTimeout(debounce);
+  debounce = setTimeout(()=>{ state.query = e.target.value.trim(); render(); }, 180);
+});
+
+document.getElementById('burgerBtn').addEventListener('click', ()=>{
+  const nav = document.getElementById('mainNav');
+  nav.style.display = nav.style.display === 'flex' ? 'none' : 'flex';
+  nav.style.flexDirection = 'column';
+  nav.style.position='absolute'; nav.style.top='64px'; nav.style.left='0'; nav.style.right='0';
+  nav.style.background='rgba(5,7,16,.97)'; nav.style.padding='16px 24px'; nav.style.gap='14px';
+  nav.style.borderBottom='1px solid var(--border)';
+});
+
+/* ============ INIT ============ */
+initFilters();
+renderHero();
+render();
+</script>
+</body>
+</html>

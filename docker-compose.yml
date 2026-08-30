@@ -1,0 +1,28 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://craftplay:craftplay@db:5432/craftplay
+    depends_on:
+      db:
+        condition: service_healthy
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: craftplay
+      POSTGRES_USER: craftplay
+      POSTGRES_PASSWORD: craftplay
+    volumes:
+      - craftplay_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U craftplay"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  craftplay_data:
+
