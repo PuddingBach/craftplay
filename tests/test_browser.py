@@ -18,7 +18,7 @@ from backend.auth import create_access_token, create_websocket_ticket, decode_we
 from backend.config import Settings
 from backend.database import SessionLocal, init_db
 from backend.main import app
-from backend.models import BrowserEntry, Room
+from backend.models import BrowserEntry, BrowserSession, Room
 
 
 def test_ssrf_rejects_private_and_metadata_addresses():
@@ -149,6 +149,57 @@ def test_browser_entry_crud_requires_admin_and_persists(monkeypatch):
         assert deleted.status_code == 204
     with SessionLocal() as db:
         assert db.get(BrowserEntry, entry_id) is None
+
+
+def test_closed_browser_session_is_reopened_instead_of_duplicated(monkeypatch):
+    init_db()
+    suffix = __import__("uuid").uuid4().hex
+    with SessionLocal() as db:
+        user = upsert_user(db, f"reopen-user-{suffix}", "Reopen Host")
+        room = Room(discord_instance_id=f"reopen-room-{suffix}", host_user_id=user.id)
+        entry = BrowserEntry(
+            name="Reopen Test",
+            slug=f"reopen-{suffix}",
+            url="https://example.com/reopen",
+            entry_type="website",
+            category="sites",
+        )
+        db.add_all([room, entry])
+        db.flush()
+        closed = BrowserSession(
+            room_id=room.id,
+            host_user_id=user.id,
+            current_url="https://example.com/old",
+            stream_room_name=f"craftplay-{room.id}",
+            browser_status="CLOSED",
+            closed_at=datetime.now(timezone.utc),
+        )
+        db.add(closed)
+        db.commit()
+        token = create_access_token(user)
+        room_id, entry_id, session_id = room.id, entry.id, closed.id
+
+    async def safe(url, **_kwargs):
+        return SimpleNamespace(url=url, hostname="example.com", addresses=("93.184.216.34",))
+
+    async def start(_room_id, _session_id, url, _shield_mode):
+        return SimpleNamespace(current_url=url)
+
+    monkeypatch.setattr("backend.browser.api.validate_public_url", safe)
+    monkeypatch.setattr("backend.browser.api.browser_service.start", start)
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/browser/session/start",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"room_id": room_id, "entry_id": entry_id},
+        )
+    assert response.status_code == 200, response.text
+    assert response.json()["id"] == session_id
+    assert response.json()["browser_status"] == "READY"
+    with SessionLocal() as db:
+        rows = db.scalars(select(BrowserSession).where(BrowserSession.room_id == room_id)).all()
+        assert len(rows) == 1
+        assert rows[0].closed_at is None
 
 
 def test_websocket_ticket_is_bound_to_room():

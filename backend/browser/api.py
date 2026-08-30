@@ -1,3 +1,4 @@
+import logging
 import re
 import time
 import unicodedata
@@ -7,6 +8,7 @@ from urllib.parse import urljoin
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import delete, func, or_, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from backend.auth import current_dashboard_admin, current_user
@@ -26,6 +28,7 @@ from backend.schemas import BrowserEntryCreate, BrowserEntryUpdate, BrowserEntry
 router = APIRouter(prefix="/api/browser", tags=["browser"])
 dashboard_router = APIRouter(prefix="/api/dashboard/browser", tags=["dashboard-browser"])
 catalog = CatalogService()
+logger = logging.getLogger("craftplay.browser.api")
 
 
 def slugify(value: str) -> str:
@@ -151,7 +154,8 @@ async def start_session(payload: BrowserSessionStart, user: User = Depends(curre
     entry = db.get(BrowserEntry, payload.entry_id) if payload.entry_id else None
     if payload.entry_id and (not entry or not entry.enabled):
         raise HTTPException(status_code=404, detail="Entrada nao encontrada")
-    existing = db.scalar(select(BrowserSession).where(BrowserSession.room_id == room.id, BrowserSession.closed_at.is_(None)))
+    stored = db.scalar(select(BrowserSession).where(BrowserSession.room_id == room.id))
+    existing = stored if stored and stored.closed_at is None else None
     has_control = is_host(db, room, user) or bool(existing and (existing.host_user_id == user.id or may_control(existing, room, user)))
     if not has_control:
         raise HTTPException(status_code=403, detail="Voce nao possui controle do navegador")
@@ -162,21 +166,53 @@ async def start_session(payload: BrowserSessionStart, user: User = Depends(curre
     url = payload.url or (entry.url if entry else None)
     if not url:
         raise HTTPException(status_code=422, detail="Informe uma entrada ou URL")
-    await validate_public_url(url)
-    row = existing
-    if not row:
+    try:
+        await validate_public_url(url)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    row = stored
+    try:
         control_setting = db.get(BrowserSetting, "control_mode")
         default_control = control_setting.value if control_setting and control_setting.value in {"HOST_ONLY", "REQUEST_CONTROL", "SHARED"} else "REQUEST_CONTROL"
-        row = BrowserSession(room_id=room.id, host_user_id=room.host_user_id or user.id, current_url=url,
-                             current_entry_id=entry.id if entry else None, shield_mode=payload.shield_mode or (entry.shield_mode if entry else browser_setting("shield_mode", "STANDARD")),
-                             stream_room_name=f"craftplay-{room.id}", control_mode=default_control)
-        db.add(row)
-        db.flush()
-    else:
-        row.current_url, row.current_entry_id = url, entry.id if entry else None
-        row.shield_mode, row.browser_status, row.error_message = payload.shield_mode or (entry.shield_mode if entry else row.shield_mode), "STARTING", None
-    db.commit()
-    db.refresh(row)
+        shield_mode = payload.shield_mode or (entry.shield_mode if entry else (row.shield_mode if row else browser_setting("shield_mode", "STANDARD")))
+        if not row:
+            row = BrowserSession(
+                room_id=room.id,
+                host_user_id=room.host_user_id or user.id,
+                current_url=url,
+                current_entry_id=entry.id if entry else None,
+                shield_mode=shield_mode,
+                stream_room_name=f"craftplay-{room.id}",
+                control_mode=default_control,
+            )
+            db.add(row)
+        else:
+            # BrowserSession.room_id is unique. Closed sessions must be reopened
+            # in place instead of inserting a second row for the same room.
+            row.host_user_id = room.host_user_id or user.id
+            row.current_url = url
+            row.current_entry_id = entry.id if entry else None
+            row.shield_mode = shield_mode
+            row.stream_room_name = f"craftplay-{room.id}"
+            row.control_mode = default_control
+            row.controller_user_id = None
+            row.control_expires_at = None
+            row.control_queue = []
+            row.privacy_mode = False
+            row.session_locked = False
+            row.closed_at = None
+            row.started_at = datetime.now(timezone.utc)
+        row.browser_status = "STARTING"
+        row.error_message = None
+        row.last_activity_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(row)
+    except SQLAlchemyError as exc:
+        db.rollback()
+        logger.exception("Falha ao preparar sessao do navegador para a sala %s", room.id)
+        raise HTTPException(status_code=503, detail="Nao foi possivel preparar a sessao no banco de dados") from exc
+
     try:
         runtime = await browser_service.start(room.id, row.id, url, row.shield_mode)
         row.current_url, row.browser_status, row.last_activity_at = runtime.current_url, "READY", datetime.now(timezone.utc)
@@ -184,8 +220,16 @@ async def start_session(payload: BrowserSessionStart, user: User = Depends(curre
             db.add(BrowserHistory(user_id=user.id, entry_id=entry.id, room_id=room.id))
         db.commit()
     except Exception as exc:
-        row.browser_status, row.error_message = "ERROR", str(exc)[:500]
-        db.commit()
+        db.rollback()
+        logger.exception("Falha ao iniciar Chromium para a sala %s", room.id)
+        failed_row = db.get(BrowserSession, row.id)
+        if failed_row:
+            failed_row.browser_status, failed_row.error_message = "ERROR", str(exc)[:500]
+            try:
+                db.commit()
+            except SQLAlchemyError:
+                db.rollback()
+                logger.exception("Falha ao registrar erro da sessao do navegador %s", row.id)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     return serialize_session(db, row)
 
