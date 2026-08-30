@@ -53,12 +53,15 @@ class BrowserService:
         self.install_process = None
         self.install_status = "idle"
         self.install_error = ""
+        self.launch_ready = False
 
     async def startup(self) -> None:
         if async_playwright is not None:
             self._playwright = await async_playwright().start()
             if not self._chromium_available() and self.settings.browser_auto_install:
                 self.install_task = asyncio.create_task(self._install_chromium())
+            elif self._chromium_available():
+                self.install_task = asyncio.create_task(self._probe_chromium())
         self.cleanup_task = asyncio.create_task(self._cleanup_loop())
 
     async def shutdown(self) -> None:
@@ -75,7 +78,7 @@ class BrowserService:
             self._playwright = None
 
     async def status(self) -> dict:
-        executable = self._chromium_available()
+        executable = self._chromium_available() and self.launch_ready
         return {
             "chromium": "healthy" if executable else "unavailable",
             "chromium_install": self.install_status,
@@ -97,12 +100,12 @@ class BrowserService:
                 raise RuntimeError("Todos os navegadores estao ocupados")
             if not self._playwright:
                 raise RuntimeError("Playwright nao esta instalado ou inicializado")
-            if not self._chromium_available() and self.install_task:
+            if not self.launch_ready and self.install_task:
                 try:
                     await asyncio.wait_for(asyncio.shield(self.install_task), timeout=self.settings.browser_start_timeout)
                 except TimeoutError as exc:
                     raise RuntimeError("Chromium ainda esta sendo preparado; tente novamente em instantes") from exc
-            if not self._chromium_available():
+            if not self._chromium_available() or not self.launch_ready:
                 reason = f": {self.install_error}" if self.install_error else ""
                 raise RuntimeError(f"Chromium nao esta instalado{reason}")
             profile_root = Path(self.settings.browser_profile_root).resolve()
@@ -171,8 +174,7 @@ class BrowserService:
             if self.install_process.returncode != 0 or not self._chromium_available():
                 detail = (stderr or stdout).decode("utf-8", "replace").strip().splitlines()
                 raise RuntimeError(detail[-1][:300] if detail else "download nao concluiu")
-            self.install_status = "ready"
-            logger.info("[BROWSER] Chromium instalado e pronto")
+            await self._probe_chromium()
         except asyncio.CancelledError:
             self.install_status = "cancelled"
             raise
@@ -182,6 +184,32 @@ class BrowserService:
             self.install_status = "failed"
             self.install_error = f"{type(exc).__name__}: {str(exc)[:240]}"
             logger.error("[BROWSER] Falha ao instalar Chromium: %s", self.install_error)
+
+    async def _probe_chromium(self) -> None:
+        self.install_status = "checking"
+        browser = None
+        try:
+            browser = await asyncio.wait_for(
+                self._playwright.chromium.launch(
+                    headless=True,
+                    args=["--disable-dev-shm-usage", "--no-first-run", "--no-sandbox"],
+                ),
+                timeout=self.settings.browser_start_timeout,
+            )
+            page = await browser.new_page()
+            await page.set_content("<title>CraftPlay browser probe</title>")
+            self.launch_ready = True
+            self.install_status = "ready"
+            self.install_error = ""
+            logger.info("[BROWSER] Chromium instalado, executado e pronto")
+        except Exception as exc:
+            self.launch_ready = False
+            self.install_status = "failed"
+            self.install_error = f"{type(exc).__name__}: Chromium nao executou neste host"
+            logger.error("[BROWSER] Probe do Chromium falhou (%s)", type(exc).__name__)
+        finally:
+            if browser:
+                await browser.close()
 
     async def _start_screencast(self, runtime: BrowserRuntime) -> None:
         runtime.cdp = await runtime.context.new_cdp_session(runtime.page)
