@@ -5,6 +5,7 @@ import { RoomSync } from "./services/room.js";
 import { CraftPlayer } from "./player/player.js";
 import { initSpecialPage } from "./diagnostics.js";
 import { configureJWPlayer } from "./config/jwplayer.js";
+import { initBrowserMode } from "./browser/app.js";
 
 const api = new ApiClient();
 const discord = new DiscordActivity(api);
@@ -193,7 +194,7 @@ async function startWatching(id, season = 0, episode = 0) {
   try {
     const [media, result] = await Promise.all([api.media(id), api.sources(id, season, episode)]);
     if (!state.room) state.room = await api.createRoom(state.session.instanceId);
-    if (!state.roomSync) { state.roomSync = new RoomSync(state.room, state.session.user); state.roomSync.connect(); }
+    if (!state.roomSync) { const { ticket } = await api.roomTicket(state.room.id); state.roomSync = new RoomSync(state.room, state.session.user, ticket); state.roomSync.connect(); }
     const mediaChange = () => state.roomSync.send("MEDIA_CHANGE", { media_id: id, season, episode });
     if (state.roomSync.socket?.readyState === WebSocket.OPEN) mediaChange();
     else state.roomSync.addEventListener("open", mediaChange, { once: true });
@@ -206,6 +207,17 @@ async function startWatching(id, season = 0, episode = 0) {
     document.body.classList.add("modal-open");
   } catch (error) { playerMount.innerHTML = ""; document.body.classList.remove("modal-open"); toast(`Não foi possível abrir o player: ${error.message}`, true); }
   finally { state.playerOpening = false; }
+}
+
+async function startDirectEntry(entryId) {
+  const entry = await api.browserEntry(entryId);
+  const type = entry.url.includes(".m3u8") ? "hls" : entry.url.includes(".mpd") ? "dash" : entry.url.includes(".webm") ? "webm" : "mp4";
+  if (!state.room) state.room = await api.createRoom(state.session.instanceId);
+  if (!state.roomSync) { const { ticket } = await api.roomTicket(state.room.id); state.roomSync = new RoomSync(state.room, state.session.user, ticket); state.roomSync.connect(); }
+  const media = { id: `browser:${entry.id}`, title: entry.name, overview: entry.description, media_type: entry.media_type || "movie", poster: entry.poster_url, backdrop: entry.banner_url, seasons: [] };
+  const sources = [{ provider: "BrowserEntry", type, url: entry.url, media_id: media.id, quality: "auto", language: "original", subtitles: [], audio_tracks: [], is_playable: true }];
+  state.currentPlayer = new CraftPlayer({ mount: playerMount, media, sources, unavailable: [], roomSync: state.roomSync, api, season: 0, episode: 0, onClose: () => { state.currentPlayer = null; document.body.classList.remove("modal-open"); } });
+  document.body.classList.add("modal-open");
 }
 
 async function performSearch(query) {
@@ -275,10 +287,15 @@ async function init() {
     Object.values(state.sections).flat().forEach((item) => state.all.set(item.id, item));
     await loadUserCollections();
     shell(); renderHero(); fillFilters(); renderCatalog();
+    const directEntry = new URLSearchParams(location.search).get("entry");
+    if (directEntry) await startDirectEntry(Number(directEntry));
   } catch (error) {
     app.innerHTML = `<div class="boot-screen"><span class="brand-mark">!</span><h1>Não foi possível iniciar a CraftPlay</h1><p>${escapeHTML(error.message)}</p><button class="btn btn-primary" onclick="location.reload()">Tentar novamente</button></div>`;
   }
 }
 
-window.addEventListener("keydown", (event) => { if (event.key === "Escape" && !state.currentPlayer) { document.querySelector("#modal-root").innerHTML = ""; document.body.classList.remove("modal-open"); } });
-init();
+window.addEventListener("keydown", (event) => { if (event.key === "Escape" && !state.currentPlayer) { document.querySelector("#modal-root")?.replaceChildren(); document.body.classList.remove("modal-open"); } });
+if (new URLSearchParams(location.search).get("mode") === "direct" || ["/debug/player", "/debug/providers"].includes(location.pathname)) init();
+else initBrowserMode({ app, api, discord }).catch((error) => {
+  app.innerHTML = `<div class="boot-screen"><span class="brand-mark">!</span><h1>Não foi possível iniciar a CraftPlay</h1><p>${escapeHTML(error.message)}</p><button class="btn btn-primary" onclick="location.reload()">Tentar novamente</button></div>`;
+});

@@ -9,7 +9,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from backend.auth import create_access_token, current_user, exchange_discord_code, upsert_user
+from backend.auth import create_access_token, create_websocket_ticket, current_user, exchange_discord_code, upsert_user
 from backend.config import get_settings
 from backend.database import get_db
 from backend.models import CustomSource, Favorite, Room, RoomMember, User, WatchHistory
@@ -24,7 +24,7 @@ router = APIRouter(prefix="/api")
 catalog = CatalogService()
 playback = PlaybackResolver()
 availability = WatchAvailabilityProvider()
-APP_RELEASE = "2026.08.30.3"
+APP_RELEASE = "2026.08.30.4"
 
 
 def require_admin(x_admin_key: str = Header(default="")):
@@ -66,6 +66,12 @@ def public_config():
             "enabled": settings.jw_player_enabled,
             "library_url": settings.jw_player_library_url,
             "license_key": settings.jw_player_license_key,
+        },
+        "browser": {
+            "default_mode": "REQUEST_CONTROL",
+            "max_participants": settings.room_max_participants,
+            "manual_url_enabled": settings.browser_manual_url_enabled,
+            "livekit_configured": bool(settings.livekit_url and settings.livekit_api_key and settings.livekit_api_secret),
         },
     }
 
@@ -307,6 +313,10 @@ def create_room(payload: RoomCreate, user: User = Depends(current_user), db: Ses
         db.add(RoomMember(room_id=room.id, user_id=user.id))
         db.commit()
         db.refresh(room)
+    elif room.host_user_id is None:
+        room.host_user_id = user.id
+        db.commit()
+        db.refresh(room)
     return room
 
 
@@ -316,3 +326,10 @@ def get_room(room_id: str, user: User = Depends(current_user), db: Session = Dep
     if not room:
         raise HTTPException(status_code=404, detail="Sala não encontrada")
     return room
+
+
+@router.post("/rooms/{room_id}/ticket")
+def room_websocket_ticket(room_id: str, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    if not db.get(Room, room_id):
+        raise HTTPException(status_code=404, detail="Sala nao encontrada")
+    return {"ticket": create_websocket_ticket(user, room_id)}

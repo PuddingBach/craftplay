@@ -1,5 +1,5 @@
 export class RoomSync extends EventTarget {
-  constructor(room, user) {
+  constructor(room, user, ticket = "") {
     super();
     this.room = room;
     this.user = user;
@@ -8,20 +8,23 @@ export class RoomSync extends EventTarget {
     this.reconnectTimer = null;
     this.reconnectAttempts = 0;
     this.closed = false;
+    this.ticket = ticket;
   }
 
   connect() {
     const protocol = location.protocol === "https:" ? "wss" : "ws";
     const proxyPrefix = location.hostname.endsWith(".discordsays.com") ? "/.proxy" : "";
-    const params = new URLSearchParams({ user_id: this.user.discord_id, username: this.user.username });
-    if (this.user.avatar) params.set("avatar", this.user.avatar);
-    this.socket = new WebSocket(`${protocol}://${location.host}${proxyPrefix}/ws/room/${this.room.id}?${params}`);
+    this.socket = new WebSocket(`${protocol}://${location.host}${proxyPrefix}/ws/room/${this.room.id}`);
     this.socket.addEventListener("message", (event) => {
       const message = JSON.parse(event.data);
       if (message.event !== "REQUEST_CONTROL" && message.event !== "ERROR") this.state = message;
       this.dispatchEvent(new CustomEvent("message", { detail: message }));
     });
-    this.socket.addEventListener("open", () => { this.reconnectAttempts = 0; this.dispatchEvent(new Event("open")); });
+    this.socket.addEventListener("open", () => {
+      this.reconnectAttempts = 0;
+      this.socket.send(JSON.stringify(this.ticket ? { event: "AUTH", ticket: this.ticket } : { event: "AUTH", user_id: this.user.discord_id, username: this.user.username, avatar: this.user.avatar }));
+      this.dispatchEvent(new Event("open"));
+    });
     this.socket.addEventListener("close", () => {
       this.dispatchEvent(new Event("close"));
       if (!this.closed) {
@@ -40,5 +43,9 @@ export class RoomSync extends EventTarget {
 
   isHost() { return this.state?.host_user_id === this.user.discord_id; }
   canControl() { return this.isHost() || this.state?.controllers?.includes(this.user.discord_id); }
+  canControlBrowser() {
+    const browser = this.state?.browser;
+    return this.isHost() || browser?.control_mode === "SHARED" || browser?.controller_user_id === this.user.discord_id;
+  }
   close() { this.closed = true; clearTimeout(this.reconnectTimer); this.socket?.close(); }
 }

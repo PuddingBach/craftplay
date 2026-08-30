@@ -16,11 +16,31 @@ class Settings(BaseSettings):
     discord_public_key: str = ""
     discord_guild_id: str = ""
     discord_activity_url: str = "https://craftplay.shardweb.app"
+    discord_redirect_uri: str = "https://craftplay.shardweb.app/auth/discord/callback"
+    dashboard_channel_id: str = ""
+    dashboard_allowed_role_ids: Annotated[list[str], NoDecode] = []
     tmdb_api_key: str = ""
     tmdb_read_access_token: str = ""
     youtube_api_key: str = ""
     vimeo_access_token: str = ""
     admin_api_key: str = ""
+    room_max_participants: int = 10
+    max_browser_sessions: int = 5
+    browser_width: int = 1920
+    browser_height: int = 1080
+    browser_fps: int = 30
+    browser_idle_timeout: int = 1800
+    browser_start_timeout: int = 30
+    empty_room_grace_period: int = 120
+    control_idle_timeout: int = 120
+    browser_allow_downloads: bool = False
+    browser_manual_url_enabled: bool = True
+    browser_headless: bool = False
+    browser_homepage: str = "about:blank"
+    browser_profile_root: str = "./browser_profiles"
+    livekit_url: str = ""
+    livekit_api_key: str = ""
+    livekit_api_secret: str = ""
     playback_cache_ttl_seconds: int = 21600
     playback_validation_timeout: float = 10
     redecanais_provider_enabled: bool = False
@@ -41,6 +61,13 @@ class Settings(BaseSettings):
     @field_validator("allowed_origins", mode="before")
     @classmethod
     def split_origins(cls, value):
+        if isinstance(value, str):
+            return [item.strip() for item in value.split(",") if item.strip()]
+        return value
+
+    @field_validator("dashboard_allowed_role_ids", mode="before")
+    @classmethod
+    def split_role_ids(cls, value):
         if isinstance(value, str):
             return [item.strip() for item in value.split(",") if item.strip()]
         return value

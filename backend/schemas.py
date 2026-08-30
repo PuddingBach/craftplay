@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
 
 
 MediaType = Literal["movie", "series", "anime", "cartoon"]
@@ -157,3 +157,100 @@ class RoomView(BaseModel):
     subtitle: str | None
     audio_track: str | None
     updated_at: datetime
+
+
+EntryType = Literal["website", "movie", "series", "anime", "cartoon", "custom"]
+OpenMode = Literal["browser", "external", "direct"]
+ShieldMode = Literal["OFF", "STANDARD", "STRICT"]
+ControlMode = Literal["HOST_ONLY", "REQUEST_CONTROL", "SHARED"]
+
+
+class BrowserEntryBase(BaseModel):
+    name: str = Field(min_length=1, max_length=160)
+    slug: str | None = Field(default=None, max_length=180, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+    entry_type: EntryType = "website"
+    media_type: str | None = Field(default=None, max_length=20)
+    url: str = Field(min_length=8, max_length=4096)
+    poster_url: str | None = Field(default=None, max_length=4096)
+    banner_url: str | None = Field(default=None, max_length=4096)
+    icon_url: str | None = Field(default=None, max_length=4096)
+    description: str = Field(default="", max_length=4000)
+    category: str = Field(default="sites", min_length=1, max_length=80)
+    featured: bool = False
+    pinned: bool = False
+    enabled: bool = True
+    sort_order: int = Field(default=0, ge=-100000, le=100000)
+    shield_mode: ShieldMode = "STANDARD"
+    open_mode: OpenMode = "browser"
+    trust_level: Literal["official", "custom", "unknown"] = "unknown"
+    tmdb_id: int | None = Field(default=None, ge=1)
+    expires_at: datetime | None = None
+
+    @field_validator("poster_url", "banner_url", "icon_url")
+    @classmethod
+    def validate_optional_asset_url(cls, value):
+        if value is not None and not value.startswith(("https://", "http://", "/")):
+            raise ValueError("URL de imagem invalida")
+        return value
+
+
+class BrowserEntryCreate(BrowserEntryBase):
+    pass
+
+
+class BrowserEntryUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=160)
+    slug: str | None = Field(default=None, max_length=180, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+    entry_type: EntryType | None = None
+    media_type: str | None = Field(default=None, max_length=20)
+    url: str | None = Field(default=None, min_length=8, max_length=4096)
+    poster_url: str | None = Field(default=None, max_length=4096)
+    banner_url: str | None = Field(default=None, max_length=4096)
+    icon_url: str | None = Field(default=None, max_length=4096)
+    description: str | None = Field(default=None, max_length=4000)
+    category: str | None = Field(default=None, min_length=1, max_length=80)
+    featured: bool | None = None
+    pinned: bool | None = None
+    enabled: bool | None = None
+    sort_order: int | None = Field(default=None, ge=-100000, le=100000)
+    shield_mode: ShieldMode | None = None
+    open_mode: OpenMode | None = None
+    trust_level: Literal["official", "custom", "unknown"] | None = None
+    tmdb_id: int | None = Field(default=None, ge=1)
+    expires_at: datetime | None = None
+
+
+class BrowserEntryView(BrowserEntryBase):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    slug: str
+    created_by: int | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class BrowserSessionStart(BaseModel):
+    room_id: str = Field(min_length=1, max_length=36)
+    entry_id: int | None = Field(default=None, ge=1)
+    url: str | None = Field(default=None, max_length=4096)
+    shield_mode: ShieldMode | None = None
+
+
+class BrowserNavigate(BaseModel):
+    room_id: str = Field(min_length=1, max_length=36)
+    url: str = Field(min_length=8, max_length=4096)
+
+
+class BrowserSessionAction(BaseModel):
+    room_id: str = Field(min_length=1, max_length=36)
+
+
+class BrowserControlGrant(BaseModel):
+    room_id: str = Field(min_length=1, max_length=36)
+    target_user_id: str = Field(min_length=1, max_length=32)
+    granted: bool = True
+
+
+class BrowserTestRequest(BaseModel):
+    url: str = Field(min_length=8, max_length=4096)
+    shield_mode: ShieldMode = "STANDARD"

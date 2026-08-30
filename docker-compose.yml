@@ -6,9 +6,19 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql+psycopg://craftplay:craftplay@db:5432/craftplay
+      REDIS_URL: redis://redis:6379/0
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+  redis:
+    image: redis:8-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
   db:
     image: postgres:16-alpine
     environment:
@@ -25,4 +35,3 @@ services:
 
 volumes:
   craftplay_data:
-

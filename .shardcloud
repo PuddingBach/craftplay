@@ -4,4 +4,4 @@ MEMORY=1024
 VERSION=recommended
 SUBDOMAIN=craftplay
 START=python -m pip install -r requirements.txt && python main.py
-DESCRIPTION=Discord Activity para assistir conteúdo aberto em grupo.
+DESCRIPTION=Discord Activity com navegador remoto compartilhado e controle colaborativo.

@@ -28,4 +28,6 @@ def init_db() -> None:
     from backend import models  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
-
+    from backend.migrations import apply_migrations
+    with SessionLocal() as db:
+        apply_migrations(db)
