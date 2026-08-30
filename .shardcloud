@@ -3,5 +3,5 @@ ENTRYPOINT=main.py
 MEMORY=1024
 VERSION=recommended
 SUBDOMAIN=craftplay
-START=python -m pip install -r requirements.txt && env BROWSER_HEADLESS=true python main.py
+START=python -m pip install -r requirements.txt && env BROWSER_HEADLESS=true MAX_BROWSER_SESSIONS=1 BROWSER_WIDTH=1280 BROWSER_HEIGHT=720 python main.py
 DESCRIPTION=Discord Activity com navegador remoto compartilhado e controle colaborativo.
