@@ -11,7 +11,7 @@ from backend.browser.livekit import create_viewer_token
 from backend.browser.security import _is_public_address, same_site, validate_public_url
 from backend.browser.service import BrowserService
 from backend.browser.shield import BrowserShield
-from backend.auth import calculate_channel_access
+from backend.auth import calculate_channel_access, verify_dashboard_access
 from backend.config import get_settings
 from backend.room_manager import RoomManager
 from backend.auth import create_access_token, create_websocket_ticket, decode_websocket_ticket, upsert_user
@@ -71,6 +71,21 @@ def test_discord_allowed_role_and_administrator_are_accepted():
     channel = {"permission_overwrites": []}
     assert calculate_channel_access({"roles": ["staff"]}, {"roles": []}, channel, "user", ["staff"])
     assert calculate_channel_access({"roles": ["admin"]}, {"roles": [{"id": "admin", "permissions": str(1 << 3)}]}, channel, "user")
+
+
+@pytest.mark.asyncio
+async def test_dashboard_explicit_user_id_does_not_require_guild_or_channel(monkeypatch):
+    settings = get_settings()
+    monkeypatch.setattr(settings, "dashboard_allowed_user_ids", ["123456789"])
+    monkeypatch.setattr(settings, "discord_bot_token", "")
+    monkeypatch.setattr(settings, "discord_guild_id", "")
+    monkeypatch.setattr(settings, "dashboard_channel_id", "")
+    assert await verify_dashboard_access("123456789") is True
+
+
+def test_dashboard_user_ids_accept_comma_separated_env_value():
+    settings = Settings(_env_file=None, dashboard_allowed_user_ids="123, 456")
+    assert settings.dashboard_allowed_user_ids == ["123", "456"]
 
 
 def test_entry_slug_is_stable_and_ascii():
@@ -285,6 +300,8 @@ async def test_headless_browser_emits_websocket_screencast(monkeypatch):
     try:
         runtime = await service.start("frame-room", "frame-session", "https://example.test")
         await runtime.page.set_content("<main style='background:#123;color:white'>CraftPlay screencast</main>")
+        captured = await service.capture_frame("frame-room")
+        assert captured["event"] == "BROWSER_FRAME" and captured["data"]
         for _ in range(30):
             if frames:
                 break

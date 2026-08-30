@@ -51,6 +51,14 @@ export class RemoteBrowserViewer extends EventTarget {
     } else {
       this.setStatus("Conectando screencast do navegador...");
     }
+    // Static pages may emit their only frame while the start API is returning.
+    // Replay the buffered frame after the viewer has mounted.
+    if (this.roomSync.lastBrowserFrame) {
+      this.onRoomMessage(this.roomSync.lastBrowserFrame);
+    } else {
+      const requestFrame = () => this.roomSync.send("BROWSER_FRAME_REQUEST");
+      if (!requestFrame()) this.roomSync.addEventListener("open", requestFrame, { once: true });
+    }
     this.bindInput();
   }
 
@@ -91,6 +99,9 @@ export class RemoteBrowserViewer extends EventTarget {
       }
       this.fallbackImage.src = `data:${message.mime || "image/jpeg"};base64,${message.data}`;
       this.setStatus("Screencast conectado · áudio indisponível neste servidor");
+    }
+    if (message.event === "BROWSER_ERROR") {
+      this.setStatus(message.message || "Screencast do navegador indisponível");
     }
     if (message.current_url) {
       const field = this.mount.querySelector("[data-browser-url]");

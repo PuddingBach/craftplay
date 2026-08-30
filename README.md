@@ -39,7 +39,7 @@ O dashboard fica em `/dashboard`. Usuários não autenticados são enviados a `/
 https://craftplay.shardweb.app/auth/discord/callback
 ```
 
-Após `identify`, o backend consulta o Discord com o token do bot, confirma que o membro pertence a `DISCORD_GUILD_ID` e calcula a permissão efetiva `VIEW_CHANNEL` de `DASHBOARD_CHANNEL_ID`, aplicando permissões base, overwrite de `@everyone`, cargos e usuário na ordem do Discord. `DASHBOARD_ALLOWED_ROLE_IDS` permite liberar explicitamente cargos administrativos. IDs de canal e usuário nunca são tratados como equivalentes. A sessão administrativa fica em cookie `HttpOnly`, `Secure` e `SameSite=Lax`; secrets não são enviados ao frontend.
+Após `identify`, o backend primeiro compara o usuário com `DASHBOARD_ALLOWED_USER_IDS` (um ou mais IDs de usuário separados por vírgula). Um ID presente nessa lista recebe acesso diretamente, sem depender de cargo, guild ou canal. Para os demais, o backend consulta o Discord com o token do bot, confirma que o membro pertence a `DISCORD_GUILD_ID` e calcula a permissão efetiva `VIEW_CHANNEL` de `DASHBOARD_CHANNEL_ID`. `DASHBOARD_ALLOWED_ROLE_IDS` continua permitindo cargos administrativos. A sessão administrativa fica em cookie `HttpOnly`, `Secure` e `SameSite=Lax`; secrets não são enviados ao frontend.
 
 O dashboard possui visão geral, BrowserEntry CRUD, ativar/desativar, fixar, destacar, duplicar, testar link, salas ativas e `/debug/browser`. A ferramenta “Abrir Agora” usa `/api/dashboard/browser/open-now` e não publica a URL na Home.
 

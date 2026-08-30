@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     discord_redirect_uri: str = "https://craftplay.shardweb.app/auth/discord/callback"
     dashboard_channel_id: str = ""
     dashboard_allowed_role_ids: Annotated[list[str], NoDecode] = []
+    dashboard_allowed_user_ids: Annotated[list[str], NoDecode] = []
     tmdb_api_key: str = ""
     tmdb_read_access_token: str = ""
     youtube_api_key: str = ""
@@ -74,9 +75,9 @@ class Settings(BaseSettings):
             return [item.strip() for item in value.split(",") if item.strip()]
         return value
 
-    @field_validator("dashboard_allowed_role_ids", mode="before")
+    @field_validator("dashboard_allowed_role_ids", "dashboard_allowed_user_ids", mode="before")
     @classmethod
-    def split_role_ids(cls, value):
+    def split_discord_ids(cls, value):
         if isinstance(value, str):
             return [item.strip() for item in value.split(",") if item.strip()]
         return value

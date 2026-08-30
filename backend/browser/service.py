@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import logging
 import os
 import shutil
@@ -234,8 +235,22 @@ class BrowserService:
             "quality": min(80, max(30, self.settings.browser_frame_quality)),
             "maxWidth": min(1280, self.viewport_width),
             "maxHeight": min(720, self.viewport_height),
-            "everyNthFrame": 2,
+            "everyNthFrame": 1,
         })
+
+    async def capture_frame(self, room_id: str) -> dict:
+        """Capture a guaranteed frame when CDP emitted before a viewer subscribed."""
+        runtime = self._require(room_id)
+        image = await runtime.page.screenshot(
+            type="jpeg",
+            quality=min(80, max(30, self.settings.browser_frame_quality)),
+        )
+        return {
+            "event": "BROWSER_FRAME",
+            "mime": "image/jpeg",
+            "data": base64.b64encode(image).decode("ascii"),
+            "timestamp": int(time.time() * 1000),
+        }
 
     async def _handle_screencast_frame(self, runtime: BrowserRuntime, frame: dict) -> None:
         try:

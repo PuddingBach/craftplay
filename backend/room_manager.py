@@ -26,6 +26,7 @@ BROWSER_INPUT_EVENTS = {
 BROWSER_EVENTS = BROWSER_INPUT_EVENTS | {
     "NAVIGATE", "CONTROL_REQUEST", "REQUEST_CONTROL", "CONTROL_GRANTED",
     "CONTROL_REVOKED", "PRIVACY_ON", "PRIVACY_OFF", "SESSION_LOCK",
+    "BROWSER_FRAME_REQUEST",
 }
 
 
@@ -185,6 +186,14 @@ class RoomManager:
             if expiry and expiry <= now: session.controller_user_id = None; session.control_expires_at = None
             controller_id = self._discord_id_for_user(session.controller_user_id)
             can_control = is_host or session.control_mode == "SHARED" or controller_id == discord_id
+            if event == "BROWSER_FRAME_REQUEST":
+                if session.privacy_mode and not is_host:
+                    return
+                try:
+                    await self.send(room_id, discord_id, await browser_service.capture_frame(room_id))
+                except Exception as exc:
+                    await self.send(room_id, discord_id, {"event": "BROWSER_ERROR", "message": str(exc)})
+                return
             if event in {"CONTROL_REQUEST", "REQUEST_CONTROL"}:
                 if session.control_mode == "HOST_ONLY":
                     await self.send(room_id, discord_id, {"event": "ERROR", "code": "CONTROL_DENIED", "message": "Esta sala permite controle apenas do host."}); return

@@ -5,6 +5,7 @@ import { adapterForSourceType } from "../src/player/controller.js";
 import { configureJWPlayer } from "../src/config/jwplayer.js";
 import { normalizePointer, shouldUseLiveKit } from "../src/browser/remote-viewer.js";
 import { resolveDiscordClientId } from "../src/discord/activity.js";
+import { RoomSync } from "../src/services/room.js";
 
 test("URLSearchParams codifica filtros de busca", () => {
   const params = new URLSearchParams({ q: "ficção científica", rating: "8" });
@@ -54,4 +55,14 @@ test("Discord Activity usa o Client ID do proxy como fonte autoritativa", () => 
 test("LiveKit só é usado quando SFU e publisher estão saudáveis", () => {
   assert.equal(shouldUseLiveKit({ livekit: { status: "healthy" }, sfu: "healthy", publisher: "unavailable", webrtc: "unavailable" }), false);
   assert.equal(shouldUseLiveKit({ livekit: { status: "healthy" }, sfu: "healthy", publisher: "healthy", webrtc: "healthy" }), true);
+});
+
+test("RoomSync guarda o frame antecipado sem apagar o estado da sala", () => {
+  const sync = new RoomSync({ id: "room" }, { discord_id: "host" });
+  sync.state = { event: "ROOM_JOIN", host_user_id: "host", controllers: [] };
+  const frame = { event: "BROWSER_FRAME", mime: "image/jpeg", data: "abc" };
+  sync.handleMessage(frame);
+  assert.equal(sync.lastBrowserFrame, frame);
+  assert.equal(sync.state.host_user_id, "host");
+  assert.equal(sync.isHost(), true);
 });

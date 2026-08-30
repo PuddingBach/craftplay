@@ -134,12 +134,17 @@ async def exchange_discord_code(code: str, redirect_uri: str | None = None) -> d
 
 
 async def verify_dashboard_access(discord_user_id: str) -> bool:
-    """Verify guild membership and effective VIEW_CHANNEL permission through the bot API."""
+    """Allow explicit user IDs or verify effective VIEW_CHANNEL through the bot API."""
     import asyncio
 
     settings = get_settings()
+    if str(discord_user_id).strip() in settings.dashboard_allowed_user_ids:
+        return True
     if not settings.discord_bot_token or not settings.discord_guild_id or not settings.dashboard_channel_id:
-        raise HTTPException(status_code=503, detail="Permissoes do dashboard nao configuradas")
+        raise HTTPException(
+            status_code=503,
+            detail="Configure DASHBOARD_ALLOWED_USER_IDS ou as permissoes de canal do dashboard",
+        )
     headers = {"Authorization": f"Bot {settings.discord_bot_token}"}
     base = "https://discord.com/api/v10"
     async with httpx.AsyncClient(timeout=12, headers=headers) as client:

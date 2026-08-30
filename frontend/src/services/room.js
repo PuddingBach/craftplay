@@ -5,6 +5,7 @@ export class RoomSync extends EventTarget {
     this.user = user;
     this.socket = null;
     this.state = null;
+    this.lastBrowserFrame = null;
     this.reconnectTimer = null;
     this.reconnectAttempts = 0;
     this.closed = false;
@@ -17,8 +18,7 @@ export class RoomSync extends EventTarget {
     this.socket = new WebSocket(`${protocol}://${location.host}${proxyPrefix}/ws/room/${this.room.id}`);
     this.socket.addEventListener("message", (event) => {
       const message = JSON.parse(event.data);
-      if (message.event !== "REQUEST_CONTROL" && message.event !== "ERROR") this.state = message;
-      this.dispatchEvent(new CustomEvent("message", { detail: message }));
+      this.handleMessage(message);
     });
     this.socket.addEventListener("open", () => {
       this.reconnectAttempts = 0;
@@ -33,6 +33,12 @@ export class RoomSync extends EventTarget {
         this.reconnectTimer = setTimeout(() => this.connect(), delay);
       }
     });
+  }
+
+  handleMessage(message) {
+    if (message.event === "BROWSER_FRAME") this.lastBrowserFrame = message;
+    else if (message.event !== "REQUEST_CONTROL" && message.event !== "ERROR") this.state = message;
+    this.dispatchEvent(new CustomEvent("message", { detail: message }));
   }
 
   send(event, data = {}) {
