@@ -1,8 +1,8 @@
 from functools import lru_cache
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./craftplay.db"
     redis_url: str = ""
     secret_key: str = "development-only-change-me"
-    allowed_origins: list[str] = [
+    allowed_origins: Annotated[list[str], NoDecode] = [
         "https://craftplay.shardweb.app",
         "http://localhost:8000",
         "http://localhost:5173",
