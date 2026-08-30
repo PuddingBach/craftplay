@@ -5,6 +5,7 @@ from urllib.parse import quote
 import httpx
 
 from backend.playback.base import PlaybackProvider
+from backend.playback.matcher import MediaMatcher
 from backend.playback.validation import normalized_title, validate_media_url
 from backend.schemas import MediaItem, PlaybackSource
 
@@ -36,7 +37,7 @@ class ArchiveProvider(PlaybackProvider):
             return None
         expected = normalized_title(f"{media.title} S{season:02d}E{episode:02d}" if season and episode else media.title)
         found = normalized_title(str(candidate.get("title", "")))
-        if SequenceMatcher(None, expected, found).ratio() < 0.68:
+        if SequenceMatcher(None, expected, found).ratio() < 0.82:
             return None
         if media.year and candidate.get("year"):
             try:
@@ -56,11 +57,19 @@ class ArchiveProvider(PlaybackProvider):
         license_value = metadata.get("licenseurl") or metadata.get("license") or metadata.get("rights")
         if not license_value:
             return None
+        matcher = MediaMatcher()
         files = sorted(data.get("files", []), key=lambda item: ("mpeg4" not in str(item.get("format", "")).casefold(), item.get("size", "0")), reverse=False)
         for item in files:
             name = str(item.get("name", ""))
             fmt = str(item.get("format", "")).casefold()
             if not (name.casefold().endswith((".mp4", ".webm", ".ogv")) or any(x in fmt for x in ("mpeg4", "h.264", "webm", "ogg video"))):
+                continue
+            try:
+                duration = float(item.get("length") or metadata.get("runtime") or 0)
+            except (TypeError, ValueError):
+                duration = 0
+            if not matcher.is_full_content(media, str(candidate.get("title", "")), duration, season, episode):
+                logging.getLogger("craftplay.playback.archive").info("[ARCHIVE] Rejected non-full content: %s (%ss)", candidate.get("title"), duration)
                 continue
             url = f"https://archive.org/download/{quote(identifier, safe='')}/{quote(name)}"
             valid, reason = await validate_media_url(url, "mp4")
@@ -69,7 +78,7 @@ class ArchiveProvider(PlaybackProvider):
                 return PlaybackSource(provider=self.name, type="mp4", url=url, media_id=media.id,
                                       quality="auto", language="original", is_playable=True,
                                       title=str(candidate.get("title") or media.title), license=str(license_value),
-                                      metadata={"identifier": identifier, "filename": name})
+                                      metadata={"identifier": identifier, "filename": name, "duration": duration})
         return None
 
     async def healthcheck(self) -> dict:

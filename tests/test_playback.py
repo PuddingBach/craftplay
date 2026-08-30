@@ -45,6 +45,17 @@ def test_media_matcher_requires_exact_episode():
     assert not rejected.accepted and "episode_mismatch" in rejected.reasons
 
 
+def test_media_matcher_rejects_trailers_reels_and_short_content():
+    movie = MediaItem(id="movie:1", title="Example Movie", media_type="movie", duration=120)
+    assert not MediaMatcher.is_full_content(movie, "Example Movie Official Trailer", 180)
+    assert not MediaMatcher.is_full_content(movie, "Example Movie", 1200)
+    assert MediaMatcher.is_full_content(movie, "Example Movie", 6500)
+    series = MediaItem(id="tv:1", title="Example Show", media_type="series")
+    assert not MediaMatcher.is_full_content(series, "Example Show atriz interview", 1500, 1, 3)
+    assert not MediaMatcher.is_full_content(series, "Example Show", 1500, 0, 0)
+    assert MediaMatcher.is_full_content(series, "Example Show S01E03", 1500, 1, 3)
+
+
 def test_provider_registry_orders_and_toggles():
     custom, redecanais = CustomProvider(), RedeCanaisProvider()
     registry = ProviderRegistry([redecanais, custom])

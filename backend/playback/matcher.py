@@ -5,6 +5,14 @@ from backend.playback.validation import normalized_title
 from backend.schemas import MediaItem
 
 
+NON_FULL_MARKERS = {
+    "trailer", "teaser", "clip", "short", "shorts", "reel", "reels", "promo",
+    "commercial", "comercial", "gameplay", "jogo", "review", "analise", "reaction",
+    "reacao", "entrevista", "bastidores", "making", "recap", "resumo", "atriz", "ator",
+    "cena", "cenas", "tv spot", "featurette",
+}
+
+
 @dataclass(frozen=True)
 class MatchResult:
     score: int
@@ -43,3 +51,22 @@ class MediaMatcher:
             else:
                 return MatchResult(score, False, [*reasons, "episode_mismatch"])
         return MatchResult(score, score >= self.threshold, reasons)
+
+    @staticmethod
+    def is_full_content(media: MediaItem, title: str, duration_seconds: float | None,
+                        season: int = 0, episode: int = 0) -> bool:
+        normalized = normalized_title(title)
+        tokens = set(normalized.split())
+        if any((marker in normalized if " " in marker else marker in tokens) for marker in NON_FULL_MARKERS):
+            return False
+        duration = float(duration_seconds or 0)
+        if media.media_type == "movie":
+            expected = (media.duration or 0) * 60
+            return duration >= (expected * 0.70 if expected else 40 * 60)
+        if not season or not episode:
+            return False
+        episode_markers = {
+            f"s{season:02d}e{episode:02d}", f"s{season}e{episode}", f"episodio {episode}",
+            f"episode {episode}", f"ep {episode}",
+        }
+        return duration >= 10 * 60 and any(marker in normalized for marker in episode_markers)

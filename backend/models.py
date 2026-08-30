@@ -103,7 +103,7 @@ class PlaybackSourceCache(Base):
     media_id: Mapped[str] = mapped_column(String(100), index=True)
     season: Mapped[int] = mapped_column(Integer, default=0)
     episode: Mapped[int] = mapped_column(Integer, default=0)
-    sources: Mapped[list] = mapped_column(JSON, default=list)
+    sources: Mapped[dict | list] = mapped_column(JSON, default=list)
     checked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 

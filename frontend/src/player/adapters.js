@@ -17,12 +17,13 @@ export class PlayerAdapter extends EventTarget {
 export class NativeVideoAdapter extends PlayerAdapter {
   async initialize() {
     this.video = document.createElement("video");
-    Object.assign(this.video, { playsInline: true, preload: "metadata", crossOrigin: "anonymous" });
+    Object.assign(this.video, { playsInline: true, preload: "metadata" });
     this.mount.append(this.video);
     this.video.src = this.source.url;
     this.video.addEventListener("play", () => { this.state = "playing"; this.emit("play"); });
     this.video.addEventListener("pause", () => { this.state = "paused"; this.emit("pause"); });
     this.video.addEventListener("ended", () => { this.state = "ended"; this.emit("ended"); });
+    this.video.addEventListener("error", () => { this.state = "error"; this.emit("error"); });
   }
   play() { return this.video.play(); }
   pause() { this.video.pause(); }

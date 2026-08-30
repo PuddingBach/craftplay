@@ -16,6 +16,7 @@ from backend.providers.anime_resolver import AnimeMetadataResolver
 
 log = logging.getLogger("craftplay.playback")
 QUALITY_ORDER = {"1080p": 0, "720p": 1, "480p": 2, "360p": 3, "original": 4, "auto": 5}
+VALIDATION_VERSION = 2
 
 
 def _aware(value: datetime) -> datetime:
@@ -53,9 +54,11 @@ class PlaybackResolver:
                     PlaybackSourceCache.episode == episode,
                 ))
                 if cached and _aware(cached.expires_at) > now:
-                    cached_sources = [PlaybackSource.model_validate(item) for item in cached.sources]
-                    if all(not source.expires_at or _aware(source.expires_at) > now for source in cached_sources):
-                        return cached_sources
+                    cache_payload = cached.sources
+                    if isinstance(cache_payload, dict) and cache_payload.get("version") == VALIDATION_VERSION:
+                        cached_sources = [PlaybackSource.model_validate(item) for item in cache_payload.get("items", [])]
+                        if all(not source.expires_at or _aware(source.expires_at) > now for source in cached_sources):
+                            return cached_sources
         log.info('[PLAYBACK] Searching source: "%s" s=%d e=%d', media.title, season, episode)
         if media.media_type == "anime":
             media = media.model_copy(deep=True)
@@ -80,10 +83,12 @@ class PlaybackResolver:
             if sources:
                 break
         sources.sort(key=self._sort)
+        for source in sources:
+            source.metadata["validation_version"] = VALIDATION_VERSION
         if sources:
             top = sources[0]
             log.info("[PLAYBACK] Selected source: %s / %s / %s", top.provider, top.type, top.quality)
-        payload = [item.model_dump(mode="json") for item in sources]
+        payload = {"version": VALIDATION_VERSION, "items": [item.model_dump(mode="json") for item in sources]}
         with SessionLocal() as db:
             cached = db.scalar(select(PlaybackSourceCache).where(
                 PlaybackSourceCache.media_id == media.id, PlaybackSourceCache.season == season,

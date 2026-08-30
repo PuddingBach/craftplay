@@ -13,7 +13,7 @@ document.body.append(playerMount);
 
 const labels = { movie: "Filmes", series: "Séries", anime: "Animes", cartoon: "Desenhos" };
 const sectionLabels = { trending: "Em alta", movies: "Filmes populares", series: "Séries populares", anime: "Animes", cartoons: "Desenhos", releases: "Lançamentos", continue: "Continuar assistindo", favorites: "Minha lista", recommended: "Recomendados para você" };
-const state = { session: null, sections: {}, all: new Map(), category: "all", query: "", genre: "", year: "", rating: "", sort: "popularity", favorites: new Set(), history: new Map(), room: null, roomSync: null, currentPlayer: null };
+const state = { session: null, sections: {}, all: new Map(), category: "all", query: "", genre: "", year: "", rating: "", sort: "popularity", favorites: new Set(), history: new Map(), room: null, roomSync: null, currentPlayer: null, playerOpening: false };
 const discordProxyPrefix = location.hostname.endsWith(".discordsays.com") ? "/.proxy" : "";
 
 const escapeHTML = (value = "") => String(value).replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]);
@@ -185,6 +185,8 @@ async function toggleFavorite(id, button) {
 }
 
 async function startWatching(id, season = 0, episode = 0) {
+  if (state.playerOpening) return;
+  state.playerOpening = true;
   playerMount.innerHTML = `<section class="player-layer"><div class="boot-screen"><span class="brand-mark">▶</span><h2>Procurando fonte...</h2><p class="mono">playback_resolver.search()</p></div></section>`;
   document.body.classList.add("modal-open");
   try {
@@ -194,7 +196,7 @@ async function startWatching(id, season = 0, episode = 0) {
     const mediaChange = () => state.roomSync.send("MEDIA_CHANGE", { media_id: id, season, episode });
     if (state.roomSync.socket?.readyState === WebSocket.OPEN) mediaChange();
     else state.roomSync.addEventListener("open", mediaChange, { once: true });
-    state.currentPlayer?.destroy();
+    await state.currentPlayer?.destroy();
     state.currentPlayer = new CraftPlayer({
       mount: playerMount, media, sources: result.sources, unavailable: result.unavailable, roomSync: state.roomSync, api, season, episode,
       onClose: () => { state.currentPlayer = null; document.body.classList.remove("modal-open"); loadUserCollections().then(renderCatalog); },
@@ -202,6 +204,7 @@ async function startWatching(id, season = 0, episode = 0) {
     });
     document.body.classList.add("modal-open");
   } catch (error) { playerMount.innerHTML = ""; document.body.classList.remove("modal-open"); toast(`Não foi possível abrir o player: ${error.message}`, true); }
+  finally { state.playerOpening = false; }
 }
 
 async function performSearch(query) {
@@ -239,6 +242,7 @@ function bindShell() {
   document.querySelector("#rating-filter").onchange = (event) => { state.rating = event.target.value; renderCatalog(); };
   document.querySelector("#sort-filter").onchange = (event) => { state.sort = event.target.value; renderCatalog(); };
   app.addEventListener("click", (event) => {
+    if (event.target.closest("#modal-root")) return;
     const detail = event.target.closest("[data-detail], [data-media-id]"); if (detail) showDetails(detail.dataset.detail || detail.dataset.mediaId);
     const watch = event.target.closest("[data-watch]"); if (watch) startWatching(watch.dataset.watch);
     const favorite = event.target.closest("[data-favorite]"); if (favorite) toggleFavorite(favorite.dataset.favorite, favorite);

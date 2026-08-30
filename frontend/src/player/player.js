@@ -45,7 +45,10 @@ export class CraftPlayer {
     if (!playable) { this.showStatus(this.source ? "fonte externa sem sincronização" : "nenhuma fonte encontrada", !this.source); return; }
     try {
       this.controller = new PlayerController(this.mount.querySelector(".engine-mount"));
-      await this.controller.load(this.source); this.bindControls(); this.showStatus("● player pronto");
+      await this.controller.load(this.source); this.bindControls();
+      this.controller.addEventListener("error", () => this.handlePlaybackError("O navegador recusou ou não conseguiu carregar esta fonte."));
+      if (this.controller.getState() === "error") return this.handlePlaybackError("O navegador recusou ou não conseguiu carregar esta fonte.");
+      this.showStatus("● player pronto");
     } catch (error) { this.showStatus(`fonte indisponível: ${error.message}`, true); }
   }
 
@@ -70,7 +73,9 @@ export class CraftPlayer {
   }
 
   moveEpisode(delta) { const select = this.mount.querySelector(".episode-select"); if (!select) return; select.selectedIndex = Math.max(0, Math.min(select.options.length - 1, select.selectedIndex + delta)); select.dispatchEvent(new Event("change")); }
-  async control(event, action, extra = {}) { if (!this.roomSync.canControl()) return this.roomSync.send("REQUEST_CONTROL"); await action(); if (!["PLAYER_PLAY", "PLAYER_PAUSE"].includes(event)) this.roomSync.send(event, { position: await this.controller?.getCurrentTime() || 0, ...extra }); }
+  async control(event, action, extra = {}) { if (!this.roomSync.canControl()) return this.roomSync.send("REQUEST_CONTROL"); try { await action(); if (!["PLAYER_PLAY", "PLAYER_PAUSE"].includes(event)) this.roomSync.send(event, { position: await this.controller?.getCurrentTime() || 0, ...extra }); } catch (error) { this.handlePlaybackError(error.message); } }
+
+  handlePlaybackError(message) { this.showStatus(`fonte indisponível: ${message}`, true); if (this.sources[this.sourceIndex + 1]) setTimeout(() => this.switchSource(this.sourceIndex + 1), 800); }
 
   bindRoom() {
     this.roomHandler = async ({ detail }) => {

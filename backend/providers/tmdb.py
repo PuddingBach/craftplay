@@ -3,7 +3,7 @@ import asyncio
 import httpx
 
 from backend.providers.base import MetadataProvider
-from backend.schemas import ExternalIds, MediaItem
+from backend.schemas import Episode, ExternalIds, MediaItem, Season
 
 
 class TMDBProvider(MetadataProvider):
@@ -41,7 +41,7 @@ class TMDBProvider(MetadataProvider):
             backdrop=f"{self.image_root}/original{raw['backdrop_path']}" if raw.get("backdrop_path") else None,
             year=int(release[:4]) if len(release) >= 4 else None,
             rating=raw.get("vote_average", 0), popularity=raw.get("popularity", 0),
-            duration=raw.get("runtime"), status=raw.get("status"),
+            duration=raw.get("runtime") or next(iter(raw.get("episode_run_time") or []), None), status=raw.get("status"),
         )
 
     async def home(self) -> dict[str, list[MediaItem]]:
@@ -82,6 +82,21 @@ class TMDBProvider(MetadataProvider):
         item.director = directors[0] if directors else None
         trailers = [video for video in data.get("videos", {}).get("results", []) if video.get("site") == "YouTube" and video.get("type") == "Trailer"]
         item.trailer = f"https://www.youtube.com/watch?v={trailers[0]['key']}" if trailers else None
+        if kind == "tv":
+            season_numbers = [entry.get("season_number") for entry in data.get("seasons", []) if entry.get("season_number", 0) > 0]
+            season_payloads = await asyncio.gather(
+                *(self._get(f"/tv/{raw_id}/season/{number}") for number in season_numbers),
+                return_exceptions=True,
+            )
+            item.seasons = [
+                Season(number=payload["season_number"], title=payload.get("name") or f"Temporada {payload['season_number']}",
+                       episodes=[Episode(id=f"tmdb:tv:{raw_id}:s{payload['season_number']}:e{episode['episode_number']}",
+                                         number=episode["episode_number"], title=episode.get("name") or f"Episodio {episode['episode_number']}",
+                                         overview=episode.get("overview") or "", duration=episode.get("runtime"),
+                                         thumbnail=f"{self.image_root}/w500{episode['still_path']}" if episode.get("still_path") else None)
+                                 for episode in payload.get("episodes", [])])
+                for payload in season_payloads if isinstance(payload, dict) and payload.get("season_number")
+            ]
         return item
 
     async def recommendations(self, media_id: str) -> list[MediaItem]:

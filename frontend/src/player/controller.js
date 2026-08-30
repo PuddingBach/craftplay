@@ -11,7 +11,7 @@ export class PlayerController extends EventTarget {
     const Adapter = adapterForSourceType(source?.type);
     if (!Adapter) throw new Error(`Engine ${source?.type || "desconhecida"} nao suportada`);
     this.adapter = new Adapter(this.mount, source);
-    for (const event of ["play", "pause", "ended"]) this.adapter.addEventListener(event, () => this.dispatchEvent(new CustomEvent(event)));
+    for (const event of ["play", "pause", "ended", "error"]) this.adapter.addEventListener(event, () => this.dispatchEvent(new CustomEvent(event)));
     await this.adapter.initialize();
     return this;
   }

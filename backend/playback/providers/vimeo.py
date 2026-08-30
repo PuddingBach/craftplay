@@ -5,6 +5,7 @@ import httpx
 
 from backend.config import get_settings
 from backend.playback.base import PlaybackProvider
+from backend.playback.matcher import MediaMatcher
 from backend.playback.validation import normalized_title
 from backend.schemas import MediaItem, PlaybackSource
 
@@ -28,7 +29,7 @@ class VimeoProvider(PlaybackProvider):
         try:
             async with httpx.AsyncClient(timeout=12) as client:
                 response = await client.get("https://api.vimeo.com/videos", headers=self.headers,
-                                            params={"query": f"{media.title}{suffix}", "per_page": 5, "fields": "uri,name,license,is_playable,privacy"})
+                                            params={"query": f"{media.title}{suffix}", "per_page": 5, "fields": "uri,name,duration,license,is_playable,privacy"})
                 response.raise_for_status()
             return response.json().get("data", [])
         except (httpx.HTTPError, ValueError) as exc:
@@ -39,7 +40,9 @@ class VimeoProvider(PlaybackProvider):
         if not candidate or not candidate.get("uri") or not candidate.get("is_playable") or not candidate.get("license"):
             return None
         expected = normalized_title(f"{media.title} S{season:02d}E{episode:02d}" if season and episode else media.title)
-        if SequenceMatcher(None, expected, normalized_title(candidate.get("name", ""))).ratio() < 0.42:
+        if SequenceMatcher(None, expected, normalized_title(candidate.get("name", ""))).ratio() < 0.72:
+            return None
+        if not MediaMatcher.is_full_content(media, candidate.get("name", ""), candidate.get("duration"), season, episode):
             return None
         privacy = candidate.get("privacy") or {}
         if privacy.get("embed") not in {"public", "whitelist"}:
@@ -55,14 +58,14 @@ class VimeoProvider(PlaybackProvider):
             return None
         return PlaybackSource(provider=self.name, type="vimeo", url=f"https://player.vimeo.com/video/{video_id}",
                               media_id=media.id, quality="auto", language="original", is_playable=True,
-                              title=candidate.get("name"), license=candidate.get("license"), metadata={"video_id": video_id})
+                              title=candidate.get("name"), license=candidate.get("license"), metadata={"video_id": video_id, "duration": candidate.get("duration")})
 
     async def healthcheck(self) -> dict:
         if not self.enabled:
             return {"name": self.name, "enabled": False, "healthy": False, "reason": "VIMEO_ACCESS_TOKEN nao configurado"}
         try:
             async with httpx.AsyncClient(timeout=8) as client:
-                response = await client.get("https://api.vimeo.com/me", headers=self.headers)
+                response = await client.get("https://api.vimeo.com/videos", headers=self.headers, params={"per_page": 1, "query": "animation"})
             return {"name": self.name, "enabled": True, "healthy": response.status_code == 200, "status": response.status_code}
         except httpx.HTTPError as exc:
             return {"name": self.name, "enabled": True, "healthy": False, "error": str(exc)}

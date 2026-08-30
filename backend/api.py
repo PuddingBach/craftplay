@@ -4,7 +4,8 @@ from datetime import datetime, timezone
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
-from sqlalchemy import select
+from sqlalchemy import delete, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from backend.auth import create_access_token, current_user, exchange_discord_code, upsert_user
@@ -255,17 +256,19 @@ def add_favorite(payload: FavoriteCreate, user: User = Depends(current_user), db
     if not favorite:
         favorite = Favorite(user_id=user.id, media_id=payload.media_id, media_type=payload.media_type)
         db.add(favorite)
-        db.commit()
-        db.refresh(favorite)
+        try:
+            db.commit()
+            db.refresh(favorite)
+        except IntegrityError:
+            db.rollback()
+            favorite = db.scalar(select(Favorite).where(Favorite.user_id == user.id, Favorite.media_id == payload.media_id, Favorite.media_type == payload.media_type))
     return favorite
 
 
 @router.delete("/user/favorites/{media_id:path}", status_code=204)
 def remove_favorite(media_id: str, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    favorite = db.scalar(select(Favorite).where(Favorite.user_id == user.id, Favorite.media_id == media_id))
-    if favorite:
-        db.delete(favorite)
-        db.commit()
+    db.execute(delete(Favorite).where(Favorite.user_id == user.id, Favorite.media_id == media_id))
+    db.commit()
     return Response(status_code=204)
 
 
