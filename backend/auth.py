@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 import httpx
-from fastapi import Cookie, Depends, Header, HTTPException, status
+from fastapi import Cookie, Depends, Header, HTTPException, Request, status
 from jose import JWTError, jwt
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -58,6 +58,7 @@ def upsert_user(db: Session, discord_id: str, username: str, avatar: str | None 
 
 
 def current_user(
+    request: Request,
     authorization: str | None = Header(default=None),
     craftplay_dashboard: str | None = Cookie(default=None),
     x_discord_user_id: str | None = Header(default=None),
@@ -75,7 +76,8 @@ def current_user(
             username = payload.get("name")
         except JWTError as exc:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Sessão inválida") from exc
-    elif settings.environment != "production":
+    local_host = (request.url.hostname or "").casefold() in {"localhost", "127.0.0.1", "::1", "testserver"}
+    if not raw_token and settings.environment != "production" and local_host:
         discord_id = x_discord_user_id or "local-user"
         username = x_discord_username or "Visitante local"
     if not discord_id:

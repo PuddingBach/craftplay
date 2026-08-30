@@ -3,5 +3,5 @@ ENTRYPOINT=main.py
 MEMORY=1024
 VERSION=recommended
 SUBDOMAIN=craftplay
-START=python -m pip install -r requirements.txt && python main.py
+START=python -m pip install -r requirements.txt && (python -m playwright install --with-deps chromium || python -m playwright install chromium || true) && python main.py
 DESCRIPTION=Discord Activity com navegador remoto compartilhado e controle colaborativo.

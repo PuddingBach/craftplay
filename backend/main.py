@@ -102,7 +102,7 @@ async def room_socket(websocket: WebSocket, room_id: str):
         discord_id = str(identity["sub"])
         username = str(identity.get("name") or "Participante")[:100]
         avatar = identity.get("avatar")
-    elif settings.environment != "production":
+    elif settings.environment != "production" and (websocket.url.hostname or "").casefold() in {"localhost", "127.0.0.1", "::1", "testserver"}:
         discord_id = str(authentication.get("user_id", ""))
         username = str(authentication.get("username", "Participante"))[:100]
         avatar = authentication.get("avatar")

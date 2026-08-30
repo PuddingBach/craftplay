@@ -157,6 +157,12 @@ def test_websocket_ticket_is_bound_to_room():
     with pytest.raises(ValueError): decode_websocket_ticket(ticket, "room-two")
 
 
+def test_development_headers_are_never_accepted_on_public_hosts():
+    with TestClient(app, base_url="https://public.example") as client:
+        response = client.get("/api/browser/entries", headers={"X-Discord-User-Id": "impersonated", "X-Discord-Username": "Host"})
+        assert response.status_code == 401
+
+
 @pytest.mark.asyncio
 async def test_room_participant_limit_is_atomic(monkeypatch):
     settings = get_settings()
