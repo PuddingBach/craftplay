@@ -169,6 +169,11 @@ def test_invalid_optional_browser_headless_does_not_crash_settings():
     assert settings.browser_headless is False
 
 
+def test_database_fallback_has_safe_local_default():
+    settings = Settings(_env_file=None)
+    assert settings.database_fallback_url.startswith("sqlite:///")
+
+
 @pytest.mark.asyncio
 async def test_room_participant_limit_is_atomic(monkeypatch):
     settings = get_settings()

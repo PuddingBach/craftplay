@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from backend.auth import create_access_token, create_websocket_ticket, current_user, exchange_discord_code, upsert_user
 from backend.config import get_settings
-from backend.database import get_db
+from backend.database import database_status, get_db
 from backend.models import CustomSource, Favorite, Room, RoomMember, User, WatchHistory
 from backend.playback import PlaybackResolver
 from backend.playback.validation import validate_media_url
@@ -42,6 +42,7 @@ def health():
         "status": "ok", "service": "craftplay",
         "release": os.getenv("GIT_COMMIT_SHA") or os.getenv("SOURCE_VERSION") or APP_RELEASE,
         "playback_validation_version": 3,
+        "database": database_status(),
         "configuration": {
             "discord_client": bool(settings.discord_client_id),
             "discord_oauth": bool(settings.discord_client_id and settings.discord_client_secret),

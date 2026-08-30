@@ -53,6 +53,7 @@ class Settings(BaseSettings):
     jw_player_license_key: str = ""
     plenoflu_enabled: bool = False
     database_url: str = "sqlite:///./craftplay.db"
+    database_fallback_url: str = "sqlite:///./craftplay-fallback.db"
     redis_url: str = ""
     secret_key: str = "development-only-change-me"
     allowed_origins: Annotated[list[str], NoDecode] = [
