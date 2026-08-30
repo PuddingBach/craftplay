@@ -59,27 +59,59 @@ async def dashboard_login():
         "redirect_uri": settings.discord_redirect_uri,
         "scope": "identify",
         "state": state,
-        "prompt": "none",
     })
     response = RedirectResponse(f"https://discord.com/oauth2/authorize?{query}")
     response.set_cookie("craftplay_oauth_state", state, max_age=600, httponly=True, secure=True, samesite="lax")
+    response.set_cookie("craftplay_oauth_purpose", "dashboard", max_age=600, httponly=True, secure=True, samesite="lax")
+    return response
+
+
+@app.get("/auth/discord/user/login", include_in_schema=False)
+async def user_login(next: str = "/"):
+    if not settings.discord_client_id:
+        raise HTTPException(status_code=503, detail="Discord OAuth nao configurado")
+    safe_next = next if next.startswith("/") and not next.startswith("//") else "/"
+    state = secrets.token_urlsafe(32)
+    query = urlencode({
+        "client_id": settings.discord_client_id,
+        "response_type": "code",
+        "redirect_uri": settings.discord_redirect_uri,
+        "scope": "identify",
+        "state": state,
+    })
+    response = RedirectResponse(f"https://discord.com/oauth2/authorize?{query}")
+    response.set_cookie("craftplay_oauth_state", state, max_age=600, httponly=True, secure=True, samesite="lax")
+    response.set_cookie("craftplay_oauth_purpose", "user", max_age=600, httponly=True, secure=True, samesite="lax")
+    response.set_cookie("craftplay_oauth_next", safe_next, max_age=600, httponly=True, secure=True, samesite="lax")
     return response
 
 
 @app.get("/auth/discord/callback", include_in_schema=False)
-async def dashboard_callback(code: str, state: str, craftplay_oauth_state: str | None = Cookie(default=None)):
+async def dashboard_callback(
+    code: str,
+    state: str,
+    craftplay_oauth_state: str | None = Cookie(default=None),
+    craftplay_oauth_purpose: str | None = Cookie(default=None),
+    craftplay_oauth_next: str | None = Cookie(default=None),
+):
     if not craftplay_oauth_state or not secrets.compare_digest(state, craftplay_oauth_state):
         raise HTTPException(status_code=400, detail="Estado OAuth invalido")
     oauth = await exchange_discord_code(code, settings.discord_redirect_uri)
     profile = oauth["profile"]
-    if not await verify_dashboard_access(str(profile["id"])):
+    dashboard_auth = craftplay_oauth_purpose != "user"
+    if dashboard_auth and not await verify_dashboard_access(str(profile["id"])):
         raise HTTPException(status_code=403, detail="Voce nao possui acesso ao canal do dashboard")
     avatar = f"https://cdn.discordapp.com/avatars/{profile['id']}/{profile['avatar']}.png" if profile.get("avatar") else None
     with SessionLocal() as db:
         user = upsert_user(db, str(profile["id"]), profile.get("global_name") or profile["username"], avatar)
-        token = create_access_token(user, dashboard_admin=True)
-    response = RedirectResponse("/dashboard")
+        token = create_access_token(user, dashboard_admin=dashboard_auth)
+    target = "/dashboard" if dashboard_auth else (craftplay_oauth_next or "/")
+    if not target.startswith("/") or target.startswith("//"):
+        target = "/"
+    response = RedirectResponse(target)
     response.delete_cookie("craftplay_oauth_state")
+    response.delete_cookie("craftplay_oauth_purpose")
+    response.delete_cookie("craftplay_oauth_next")
     response.set_cookie("craftplay_dashboard", token, max_age=7 * 86400, httponly=True, secure=True, samesite="lax")
     return response
 

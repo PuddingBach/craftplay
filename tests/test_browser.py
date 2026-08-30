@@ -164,6 +164,15 @@ def test_development_headers_are_never_accepted_on_public_hosts():
         assert response.status_code == 401
 
 
+def test_direct_browser_login_starts_discord_oauth_without_open_redirect():
+    with TestClient(app, base_url="https://public.example", follow_redirects=False) as client:
+        response = client.get("/auth/discord/user/login?next=https://evil.example")
+        assert response.status_code in {302, 307}
+        assert response.headers["location"].startswith("https://discord.com/oauth2/authorize?")
+        assert client.cookies.get("craftplay_oauth_purpose") == "user"
+        assert client.cookies.get("craftplay_oauth_next").strip('"') == "/"
+
+
 def test_invalid_optional_browser_headless_does_not_crash_settings():
     settings = Settings(_env_file=None, browser_headless="falsev")
     assert settings.browser_headless is False

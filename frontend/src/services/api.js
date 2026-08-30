@@ -28,7 +28,9 @@ export class ApiClient {
     const response = await fetch(target, { credentials: "same-origin", ...options, headers });
     if (!response.ok) {
       const problem = await response.json().catch(() => ({}));
-      throw new Error(problem.detail || `Falha na API (${response.status})`);
+      const error = new Error(problem.detail || `Falha na API (${response.status})`);
+      error.status = response.status;
+      throw error;
     }
     return response.status === 204 ? null : response.json();
   }

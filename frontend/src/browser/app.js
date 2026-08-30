@@ -8,7 +8,17 @@ export async function initBrowserMode({ app, api, discord }) {
   if (location.pathname === "/dashboard") return initDashboard(app, api);
   if (location.pathname === "/debug/browser") return initBrowserDebug(app, api);
   const activity = await discord.initialize();
-  const home = await api.home();
+  let home;
+  try {
+    home = await api.home();
+  } catch (error) {
+    if (!activity.embedded && error.status === 401) {
+      const next = `${location.pathname}${location.search}`;
+      location.assign(`/auth/discord/user/login?next=${encodeURIComponent(next)}`);
+      return;
+    }
+    throw error;
+  }
   const user = home.user || activity.user;
   const room = await api.createRoom(activity.instanceId);
   const capabilities = await api.browserCapabilities(room.id);

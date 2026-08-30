@@ -290,6 +290,11 @@ async function init() {
     const directEntry = new URLSearchParams(location.search).get("entry");
     if (directEntry) await startDirectEntry(Number(directEntry));
   } catch (error) {
+    if (window.self === window.top && error.status === 401) {
+      const next = `${location.pathname}${location.search}`;
+      location.assign(`/auth/discord/user/login?next=${encodeURIComponent(next)}`);
+      return;
+    }
     app.innerHTML = `<div class="boot-screen"><span class="brand-mark">!</span><h1>Não foi possível iniciar a CraftPlay</h1><p>${escapeHTML(error.message)}</p><button class="btn btn-primary" onclick="location.reload()">Tentar novamente</button></div>`;
   }
 }
