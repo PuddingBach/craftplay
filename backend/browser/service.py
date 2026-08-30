@@ -54,6 +54,10 @@ class BrowserService:
         self.install_status = "idle"
         self.install_error = ""
         self.launch_ready = False
+        memory_limit = self._memory_limit_mb()
+        self.max_sessions = 1 if memory_limit and memory_limit <= 2048 else self.settings.max_browser_sessions
+        self.viewport_width = min(1280, self.settings.browser_width) if memory_limit and memory_limit <= 2048 else self.settings.browser_width
+        self.viewport_height = min(720, self.settings.browser_height) if memory_limit and memory_limit <= 2048 else self.settings.browser_height
 
     async def startup(self) -> None:
         if async_playwright is not None:
@@ -85,7 +89,7 @@ class BrowserService:
             "chromium_install_error": self.install_error,
             "playwright": "healthy" if self._playwright else "unavailable",
             "active_sessions": len(self.sessions),
-            "max_sessions": self.settings.max_browser_sessions,
+            "max_sessions": self.max_sessions,
             "publisher": browser_publisher.status(),
         }
 
@@ -96,7 +100,7 @@ class BrowserService:
             if existing:
                 await self.navigate(room_id, safe.url)
                 return existing
-            if len(self.sessions) >= self.settings.max_browser_sessions:
+            if len(self.sessions) >= self.max_sessions:
                 raise RuntimeError("Todos os navegadores estao ocupados")
             if not self._playwright:
                 raise RuntimeError("Playwright nao esta instalado ou inicializado")
@@ -116,12 +120,19 @@ class BrowserService:
             profile_path.mkdir(parents=True, exist_ok=True)
             xserver = None
             browser_env = dict(os.environ)
-            if os.name != "nt" and not self.settings.browser_headless:
+            use_headless = self.settings.browser_headless
+            if os.name != "nt" and not use_headless and not shutil.which("Xvfb"):
+                if self.settings.browser_websocket_fallback:
+                    use_headless = True
+                    logger.warning("[BROWSER] Xvfb ausente; usando Chromium headless com screencast")
+                else:
+                    raise RuntimeError("Xvfb nao esta instalado para o Chromium visual")
+            if os.name != "nt" and not use_headless:
                 if not shutil.which("Xvfb"):
                     raise RuntimeError("Xvfb nao esta instalado para o Chromium visual")
                 display = f":{100 + len(self.sessions)}"
                 xserver = await asyncio.create_subprocess_exec(
-                    "Xvfb", display, "-screen", "0", f"{self.settings.browser_width}x{self.settings.browser_height}x24", "-nolisten", "tcp",
+                    "Xvfb", display, "-screen", "0", f"{self.viewport_width}x{self.viewport_height}x24", "-nolisten", "tcp",
                     stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
                 )
                 browser_env["DISPLAY"] = display
@@ -129,8 +140,8 @@ class BrowserService:
             try:
                 context = await asyncio.wait_for(
                     self._playwright.chromium.launch_persistent_context(
-                        str(profile_path), headless=self.settings.browser_headless,
-                        viewport={"width": self.settings.browser_width, "height": self.settings.browser_height},
+                        str(profile_path), headless=use_headless,
+                        viewport={"width": self.viewport_width, "height": self.viewport_height},
                         env=browser_env,
                         accept_downloads=False,
                         args=["--disable-dev-shm-usage", "--no-first-run", "--autoplay-policy=no-user-gesture-required"],
@@ -221,8 +232,8 @@ class BrowserService:
         await runtime.cdp.send("Page.startScreencast", {
             "format": "jpeg",
             "quality": min(80, max(30, self.settings.browser_frame_quality)),
-            "maxWidth": min(1280, self.settings.browser_width),
-            "maxHeight": min(720, self.settings.browser_height),
+            "maxWidth": min(1280, self.viewport_width),
+            "maxHeight": min(720, self.viewport_height),
             "everyNthFrame": 2,
         })
 
@@ -255,7 +266,7 @@ class BrowserService:
     async def action(self, room_id: str, event: str, payload: dict) -> None:
         runtime = self._require(room_id)
         page = runtime.page
-        width, height = self.settings.browser_width, self.settings.browser_height
+        width, height = self.viewport_width, self.viewport_height
         if event == "MOUSE_MOVE":
             await page.mouse.move(self._coordinate(payload.get("x"), width), self._coordinate(payload.get("y"), height))
         elif event == "MOUSE_CLICK":
@@ -320,6 +331,19 @@ class BrowserService:
         if not runtime:
             raise RuntimeError("Navegador remoto nao esta ativo")
         return runtime
+
+    @staticmethod
+    def _memory_limit_mb() -> int | None:
+        for candidate in (Path("/sys/fs/cgroup/memory.max"), Path("/sys/fs/cgroup/memory/memory.limit_in_bytes")):
+            try:
+                value = candidate.read_text(encoding="utf-8").strip()
+                if value and value != "max":
+                    limit = int(value) // (1024 * 1024)
+                    if 0 < limit < 1024 * 1024:
+                        return limit
+            except (OSError, ValueError):
+                continue
+        return None
 
     @staticmethod
     def _coordinate(value, size: int) -> float:
