@@ -123,8 +123,8 @@ Ou execute `docker compose up --build`.
 ## 7. Publicar na ShardCloud
 
 1. Crie um serviço web conectado a este repositório.
-2. O arquivo `.shardcloud` identifica `backend/main.py` como entrypoint Python, mesmo com o `package.json` do frontend presente.
-3. O comando de início instala o `requirements.txt` de modo defensivo e executa `python -m uvicorn backend.main:app --host 0.0.0.0 --port $PORT`. Ele já está definido em `.shardcloud`; o `Procfile` contém a variante para plataformas com etapa de build separada.
+2. O arquivo `.shardcloud` identifica o `main.py` da raiz como entrypoint Python, mesmo com o `package.json` do frontend presente.
+3. O comando de início instala o `requirements.txt` de modo defensivo e executa `python main.py`. O entrypoint lê a porta fornecida pela variável `PORT`. Essa configuração já está definida em `.shardcloud` e no `Procfile`.
 4. Adicione um PostgreSQL e copie a URL para `DATABASE_URL`.
 5. Cadastre todas as variáveis de `.env.example` no painel; não faça upload do `.env`.
 6. Verifique `https://seu-dominio/api/health` e `https://seu-dominio/docs`.
