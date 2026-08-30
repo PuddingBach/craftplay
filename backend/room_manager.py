@@ -261,5 +261,23 @@ class RoomManager:
         for discord_id in stale:
             self.connections[room_id].pop(discord_id, None); self.profiles[room_id].pop(discord_id, None)
 
+    async def broadcast_browser_frame(self, room_id: str, payload: dict) -> None:
+        targets = list(self.connections[room_id].items())
+        with SessionLocal() as db:
+            room = db.get(Room, room_id)
+            session = db.scalar(select(BrowserSession).where(BrowserSession.room_id == room_id, BrowserSession.closed_at.is_(None)))
+            if room and session and session.privacy_mode:
+                host_id = self._discord_id_for_user(room.host_user_id)
+                targets = [(discord_id, socket) for discord_id, socket in targets if discord_id == host_id]
+        stale = []
+        for discord_id, socket in targets:
+            try:
+                await socket.send_json(payload)
+            except Exception:
+                stale.append(discord_id)
+        for discord_id in stale:
+            self.connections[room_id].pop(discord_id, None)
+            self.profiles[room_id].pop(discord_id, None)
+
 
 room_manager = RoomManager()

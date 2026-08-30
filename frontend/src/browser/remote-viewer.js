@@ -14,6 +14,7 @@ export class RemoteBrowserViewer extends EventTarget {
     this.roomId = roomId;
     this.user = user;
     this.livekit = null;
+    this.fallbackImage = null;
     this.lastMove = 0;
     this.boundMessage = (event) => this.onRoomMessage(event.detail);
   }
@@ -71,6 +72,16 @@ export class RemoteBrowserViewer extends EventTarget {
   }
 
   onRoomMessage(message) {
+    if (message.event === "BROWSER_FRAME" && message.data) {
+      if (!this.fallbackImage) {
+        this.fallbackImage = document.createElement("img");
+        this.fallbackImage.className = "remote-frame";
+        this.fallbackImage.alt = "Navegador remoto";
+        this.mount.querySelector(".remote-media")?.append(this.fallbackImage);
+      }
+      this.fallbackImage.src = `data:${message.mime || "image/jpeg"};base64,${message.data}`;
+      this.setStatus("Screencast conectado · áudio indisponível neste servidor");
+    }
     if (message.current_url) {
       const field = this.mount.querySelector("[data-browser-url]");
       if (field) field.value = message.current_url;
@@ -106,5 +117,6 @@ export class RemoteBrowserViewer extends EventTarget {
     this.roomSync.removeEventListener("message", this.boundMessage);
     this.livekit?.disconnect();
     this.livekit = null;
+    this.fallbackImage = null;
   }
 }

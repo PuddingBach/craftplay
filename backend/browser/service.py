@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import shutil
+import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -37,6 +38,8 @@ class BrowserRuntime:
     restarting: bool = False
     console: list[dict] = field(default_factory=list)
     xserver: Any = None
+    cdp: Any = None
+    last_frame_at: float = 0
 
 
 class BrowserService:
@@ -46,15 +49,25 @@ class BrowserService:
         self.sessions: dict[str, BrowserRuntime] = {}
         self.lock = asyncio.Lock()
         self.cleanup_task: asyncio.Task | None = None
+        self.install_task: asyncio.Task | None = None
+        self.install_process = None
+        self.install_status = "idle"
+        self.install_error = ""
 
     async def startup(self) -> None:
         if async_playwright is not None:
             self._playwright = await async_playwright().start()
+            if not self._chromium_available() and self.settings.browser_auto_install:
+                self.install_task = asyncio.create_task(self._install_chromium())
         self.cleanup_task = asyncio.create_task(self._cleanup_loop())
 
     async def shutdown(self) -> None:
         if self.cleanup_task:
             self.cleanup_task.cancel()
+        if self.install_task and not self.install_task.done():
+            self.install_task.cancel()
+        if self.install_process and self.install_process.returncode is None:
+            self.install_process.terminate()
         for room_id in list(self.sessions):
             await self.close(room_id)
         if self._playwright:
@@ -62,14 +75,11 @@ class BrowserService:
             self._playwright = None
 
     async def status(self) -> dict:
-        executable = False
-        if self._playwright:
-            try:
-                executable = Path(self._playwright.chromium.executable_path).exists()
-            except Exception:
-                executable = False
+        executable = self._chromium_available()
         return {
             "chromium": "healthy" if executable else "unavailable",
+            "chromium_install": self.install_status,
+            "chromium_install_error": self.install_error,
             "playwright": "healthy" if self._playwright else "unavailable",
             "active_sessions": len(self.sessions),
             "max_sessions": self.settings.max_browser_sessions,
@@ -87,6 +97,14 @@ class BrowserService:
                 raise RuntimeError("Todos os navegadores estao ocupados")
             if not self._playwright:
                 raise RuntimeError("Playwright nao esta instalado ou inicializado")
+            if not self._chromium_available() and self.install_task:
+                try:
+                    await asyncio.wait_for(asyncio.shield(self.install_task), timeout=self.settings.browser_start_timeout)
+                except TimeoutError as exc:
+                    raise RuntimeError("Chromium ainda esta sendo preparado; tente novamente em instantes") from exc
+            if not self._chromium_available():
+                reason = f": {self.install_error}" if self.install_error else ""
+                raise RuntimeError(f"Chromium nao esta instalado{reason}")
             profile_root = Path(self.settings.browser_profile_root).resolve()
             profile_root.mkdir(parents=True, exist_ok=True)
             profile_path = (profile_root / room_id).resolve()
@@ -128,8 +146,73 @@ class BrowserService:
         await self.navigate(room_id, safe.url)
         if runtime.xserver:
             await browser_publisher.start(room_id, f"craftplay-{room_id}", browser_env["DISPLAY"])
+        elif self.settings.browser_websocket_fallback:
+            await self._start_screencast(runtime)
         logger.info("[BROWSER] Room %s started Chromium", room_id)
         return runtime
+
+    def _chromium_available(self) -> bool:
+        if not self._playwright:
+            return False
+        try:
+            return Path(self._playwright.chromium.executable_path).exists()
+        except Exception:
+            return False
+
+    async def _install_chromium(self) -> None:
+        self.install_status = "installing"
+        logger.info("[BROWSER] Instalando Chromium em segundo plano")
+        try:
+            self.install_process = await asyncio.create_subprocess_exec(
+                sys.executable, "-m", "playwright", "install", "chromium",
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await asyncio.wait_for(self.install_process.communicate(), timeout=600)
+            if self.install_process.returncode != 0 or not self._chromium_available():
+                detail = (stderr or stdout).decode("utf-8", "replace").strip().splitlines()
+                raise RuntimeError(detail[-1][:300] if detail else "download nao concluiu")
+            self.install_status = "ready"
+            logger.info("[BROWSER] Chromium instalado e pronto")
+        except asyncio.CancelledError:
+            self.install_status = "cancelled"
+            raise
+        except Exception as exc:
+            if self.install_process and self.install_process.returncode is None:
+                self.install_process.terminate()
+            self.install_status = "failed"
+            self.install_error = f"{type(exc).__name__}: {str(exc)[:240]}"
+            logger.error("[BROWSER] Falha ao instalar Chromium: %s", self.install_error)
+
+    async def _start_screencast(self, runtime: BrowserRuntime) -> None:
+        runtime.cdp = await runtime.context.new_cdp_session(runtime.page)
+        await runtime.cdp.send("Page.enable")
+        runtime.cdp.on(
+            "Page.screencastFrame",
+            lambda frame: asyncio.create_task(self._handle_screencast_frame(runtime, frame)),
+        )
+        await runtime.cdp.send("Page.startScreencast", {
+            "format": "jpeg",
+            "quality": min(80, max(30, self.settings.browser_frame_quality)),
+            "maxWidth": min(1280, self.settings.browser_width),
+            "maxHeight": min(720, self.settings.browser_height),
+            "everyNthFrame": 2,
+        })
+
+    async def _handle_screencast_frame(self, runtime: BrowserRuntime, frame: dict) -> None:
+        try:
+            await runtime.cdp.send("Page.screencastFrameAck", {"sessionId": frame["sessionId"]})
+            now = time.monotonic()
+            fps = min(10, max(1, self.settings.browser_frame_fps))
+            if now - runtime.last_frame_at < 1 / fps:
+                return
+            runtime.last_frame_at = now
+            from backend.room_manager import room_manager
+            await room_manager.broadcast_browser_frame(runtime.room_id, {
+                "event": "BROWSER_FRAME", "mime": "image/jpeg", "data": frame.get("data", ""),
+                "timestamp": int(time.time() * 1000),
+            })
+        except Exception:
+            logger.debug("Frame de screencast descartado", exc_info=True)
 
     async def navigate(self, room_id: str, url: str) -> str:
         runtime = self._require(room_id)
@@ -182,6 +265,12 @@ class BrowserService:
             return
         try:
             await browser_publisher.close(room_id)
+            if runtime.cdp:
+                try:
+                    await runtime.cdp.send("Page.stopScreencast")
+                    await runtime.cdp.detach()
+                except Exception:
+                    pass
             await runtime.context.close()
         finally:
             if runtime.xserver and runtime.xserver.returncode is None:

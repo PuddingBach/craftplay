@@ -200,3 +200,41 @@ async def test_room_participant_limit_is_atomic(monkeypatch):
     await manager.connect(room.id, "limit-host", Socket(), {"username": "Host"})
     with pytest.raises(OverflowError):
         await manager.connect(room.id, "limit-guest", Socket(), {"username": "Guest"})
+
+
+@pytest.mark.asyncio
+async def test_headless_browser_emits_websocket_screencast(monkeypatch):
+    from backend.room_manager import room_manager
+
+    service = BrowserService()
+    monkeypatch.setattr(service.settings, "browser_headless", True)
+    monkeypatch.setattr(service.settings, "browser_websocket_fallback", True)
+    monkeypatch.setattr(service.settings, "browser_auto_install", False)
+    await service.startup()
+    if not service._chromium_available():
+        await service.shutdown()
+        pytest.skip("Chromium local não instalado")
+    safe = SimpleNamespace(url="https://example.com", hostname="example.com")
+
+    async def fake_validate(*_args, **_kwargs):
+        return safe
+
+    frames = []
+
+    async def capture_frame(_room_id, payload):
+        frames.append(payload)
+
+    monkeypatch.setattr("backend.browser.service.validate_public_url", fake_validate)
+    monkeypatch.setattr(room_manager, "broadcast_browser_frame", capture_frame)
+    try:
+        runtime = await service.start("frame-room", "frame-session", "https://example.test")
+        await runtime.page.set_content("<main style='background:#123;color:white'>CraftPlay screencast</main>")
+        for _ in range(30):
+            if frames:
+                break
+            await __import__("asyncio").sleep(.1)
+        assert frames and frames[0]["event"] == "BROWSER_FRAME"
+        assert frames[0]["data"]
+    finally:
+        await service.close("frame-room")
+        await service.shutdown()
