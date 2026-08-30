@@ -1,3 +1,4 @@
+import os
 import secrets
 from datetime import datetime, timezone
 
@@ -23,6 +24,7 @@ router = APIRouter(prefix="/api")
 catalog = CatalogService()
 playback = PlaybackResolver()
 availability = WatchAvailabilityProvider()
+APP_RELEASE = "2026.08.30.3"
 
 
 def require_admin(x_admin_key: str = Header(default="")):
@@ -38,6 +40,8 @@ def health():
     settings = get_settings()
     return {
         "status": "ok", "service": "craftplay",
+        "release": os.getenv("GIT_COMMIT_SHA") or os.getenv("SOURCE_VERSION") or APP_RELEASE,
+        "playback_validation_version": 3,
         "configuration": {
             "discord_client": bool(settings.discord_client_id),
             "discord_oauth": bool(settings.discord_client_id and settings.discord_client_secret),
