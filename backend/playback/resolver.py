@@ -8,7 +8,8 @@ from backend.config import get_settings
 from backend.database import SessionLocal
 from backend.models import PlaybackSourceCache
 from backend.playback.base import PlaybackProvider
-from backend.playback.providers import ArchiveProvider, CustomProvider, PlenoFluProvider, VimeoProvider, WikimediaProvider, YouTubeProvider
+from backend.playback.providers import ArchiveProvider, CustomProvider, PlenoFluProvider, RedeCanaisProvider, VimeoProvider, WikimediaProvider, YouTubeProvider
+from backend.playback.registry import ProviderRegistry
 from backend.schemas import MediaItem, PlaybackSource
 from backend.providers.anime_resolver import AnimeMetadataResolver
 
@@ -27,11 +28,16 @@ class PlaybackResolver:
     def __init__(self, providers: list[PlaybackProvider] | None = None):
         self.anime_metadata = AnimeMetadataResolver()
         if providers is not None:
-            self.providers = providers
+            configured = providers
         else:
-            self.providers = [CustomProvider(), ArchiveProvider(), YouTubeProvider(), VimeoProvider(), WikimediaProvider()]
+            configured = [CustomProvider(), RedeCanaisProvider(), ArchiveProvider(), YouTubeProvider(), VimeoProvider(), WikimediaProvider()]
             if get_settings().plenoflu_enabled:
-                self.providers.append(PlenoFluProvider())
+                configured.append(PlenoFluProvider())
+        self.registry = ProviderRegistry(configured)
+
+    @property
+    def providers(self) -> list[PlaybackProvider]:
+        return self.registry.get_providers(include_disabled=True)
 
     @staticmethod
     def _sort(source: PlaybackSource) -> tuple:
@@ -47,15 +53,18 @@ class PlaybackResolver:
                     PlaybackSourceCache.episode == episode,
                 ))
                 if cached and _aware(cached.expires_at) > now:
-                    return [PlaybackSource.model_validate(item) for item in cached.sources]
+                    cached_sources = [PlaybackSource.model_validate(item) for item in cached.sources]
+                    if all(not source.expires_at or _aware(source.expires_at) > now for source in cached_sources):
+                        return cached_sources
         log.info('[PLAYBACK] Searching source: "%s" s=%d e=%d', media.title, season, episode)
         if media.media_type == "anime":
             media = media.model_copy(deep=True)
             media.tags = list(dict.fromkeys([*media.tags, *(await self.anime_metadata.resolve(media))]))
         sources: list[PlaybackSource] = []
-        for provider in self.providers:
+        for provider in self.registry.get_providers():
             if not provider.can_handle(media):
                 continue
+            started = self.registry.timer()
             candidates = await provider.search_sources(media, season, episode)
             log.info("[%s] %d candidates found", provider.name.upper(), len(candidates))
             resolved = await asyncio.gather(
@@ -65,6 +74,9 @@ class PlaybackResolver:
             for source in resolved:
                 if isinstance(source, PlaybackSource) and source.is_playable:
                     sources.append(source)
+            reason = getattr(provider, "last_reason", "")
+            outcome = "success" if sources else "restricted" if reason == "SOURCE_RESTRICTED" else "not_found"
+            self.registry.record(provider.name, outcome, self.registry.timer() - started)
             if sources:
                 break
         sources.sort(key=self._sort)
@@ -106,7 +118,9 @@ class PlaybackResolver:
         return results
 
     async def status(self) -> list[dict]:
-        return list(await asyncio.gather(*(provider.healthcheck() for provider in self.providers)))
+        checks = await asyncio.gather(*(provider.healthcheck() for provider in self.providers))
+        return [{**check, "priority": provider.priority, "metrics": self.registry.metrics(provider.name)}
+                for provider, check in zip(self.providers, checks)]
 
     @staticmethod
     def invalidate(media_id: str | None = None) -> None:

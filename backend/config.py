@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     vimeo_access_token: str = ""
     admin_api_key: str = ""
     playback_cache_ttl_seconds: int = 21600
+    playback_validation_timeout: float = 10
+    redecanais_provider_enabled: bool = False
     plenoflu_enabled: bool = False
     database_url: str = "sqlite:///./craftplay.db"
     redis_url: str = ""

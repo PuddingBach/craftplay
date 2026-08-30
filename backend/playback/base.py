@@ -8,7 +8,12 @@ class PlaybackProvider(ABC):
     """Contract for services that can return an actually playable video."""
 
     name = "provider"
+    priority = 0
     enabled = True
+
+    @property
+    def provider_name(self) -> str:
+        return self.name
 
     def can_handle(self, media: MediaItem) -> bool:
         return self.enabled
@@ -24,3 +29,8 @@ class PlaybackProvider(ABC):
 
     async def healthcheck(self) -> dict[str, Any]:
         return {"name": self.name, "enabled": self.enabled, "healthy": self.enabled}
+
+    async def validate(self, source: PlaybackSource) -> tuple[bool, str]:
+        from backend.playback.validation import validate_media_url
+
+        return await validate_media_url(source.url, source.type)

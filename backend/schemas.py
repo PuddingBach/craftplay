@@ -65,7 +65,7 @@ class AudioTrack(BaseModel):
 
 class PlaybackSource(BaseModel):
     provider: str
-    type: Literal["hls", "dash", "mp4", "embed", "youtube", "vimeo"]
+    type: Literal["hls", "dash", "mp4", "webm", "embed", "youtube", "vimeo"]
     url: str
     media_id: str
     subtitles: list[SubtitleTrack] = []
@@ -76,6 +76,8 @@ class PlaybackSource(BaseModel):
     title: str | None = None
     license: str | None = None
     metadata: dict = {}
+    headers: dict[str, str] = {}
+    expires_at: datetime | None = None
 
 
 class CustomSourceCreate(BaseModel):
@@ -85,7 +87,7 @@ class CustomSourceCreate(BaseModel):
     episode: int = Field(default=0, ge=0)
     provider: str = Field(default="custom", min_length=1, max_length=60)
     url: str
-    source_type: Literal["hls", "dash", "mp4", "embed", "youtube", "vimeo"]
+    source_type: Literal["hls", "dash", "mp4", "webm", "embed", "youtube", "vimeo"]
     language: str = Field(default="original", max_length=20)
     quality: str = Field(default="auto", max_length=20)
     enabled: bool = True

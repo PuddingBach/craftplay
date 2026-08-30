@@ -7,6 +7,7 @@ export class PlayerAdapter extends EventTarget {
   async getCurrentTime() { return 0; }
   async getDuration() { return 0; }
   async setVolume() {}
+  async setMuted() {}
   async setPlaybackRate() {}
   getState() { return this.state; }
   destroy() { this.mount.innerHTML = ""; }
@@ -29,6 +30,7 @@ export class NativeVideoAdapter extends PlayerAdapter {
   async getCurrentTime() { return this.video.currentTime || 0; }
   async getDuration() { return Number.isFinite(this.video.duration) ? this.video.duration : 0; }
   async setVolume(value) { this.video.volume = Math.max(0, Math.min(1, value)); }
+  async setMuted(value) { this.video.muted = Boolean(value); }
   async setPlaybackRate(value) { this.video.playbackRate = value; }
   destroy() { this.video?.pause(); this.video?.removeAttribute("src"); this.video?.load(); super.destroy(); }
 }
@@ -110,6 +112,16 @@ export class VimeoAdapter extends PlayerAdapter {
   getCurrentTime() { return this.player.getCurrentTime(); }
   getDuration() { return this.player.getDuration(); }
   setVolume(value) { return this.player.setVolume(Math.max(0, Math.min(1, value))); }
+  setMuted(value) { return this.player.setMuted(Boolean(value)); }
   setPlaybackRate(value) { return this.player.setPlaybackRate(value).catch(() => {}); }
   async destroy() { await this.player?.destroy(); this.mount.innerHTML = ""; }
+}
+
+export class EmbedAdapter extends PlayerAdapter {
+  async initialize() {
+    this.iframe = document.createElement("iframe"); this.iframe.src = this.source.url;
+    this.iframe.allow = "autoplay; fullscreen; picture-in-picture"; this.iframe.allowFullscreen = true;
+    this.mount.append(this.iframe); this.state = "external";
+  }
+  destroy() { this.iframe?.remove(); super.destroy(); }
 }

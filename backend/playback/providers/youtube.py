@@ -11,6 +11,7 @@ from backend.schemas import MediaItem, PlaybackSource
 
 class YouTubeProvider(PlaybackProvider):
     name = "youtube"
+    priority = 40
     api_root = "https://www.googleapis.com/youtube/v3"
 
     def __init__(self):

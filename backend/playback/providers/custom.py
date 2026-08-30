@@ -17,6 +17,7 @@ OPEN_MOVIES = {
 
 class CustomProvider(PlaybackProvider):
     name = "custom"
+    priority = 100
 
     async def search_sources(self, media: MediaItem, season: int = 0, episode: int = 0) -> list[dict]:
         with SessionLocal() as db:

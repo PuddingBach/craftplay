@@ -64,6 +64,8 @@ YOUTUBE_API_KEY=chave_youtube_opcional
 VIMEO_ACCESS_TOKEN=token_vimeo_opcional
 ADMIN_API_KEY=gere_uma_chave_administrativa_longa
 PLAYBACK_CACHE_TTL_SECONDS=21600
+PLAYBACK_VALIDATION_TIMEOUT=10
+REDECANAIS_PROVIDER_ENABLED=false
 PLENOFLU_ENABLED=false
 DATABASE_URL=postgresql+psycopg://usuario:senha@host:5432/craftplay
 SECRET_KEY=gere-um-valor-aleatorio-longo
@@ -82,6 +84,14 @@ TMDB, AniList, Jikan e TVMaze fornecem somente metadados. As fontes reproduzivei
 - `/debug/providers`: diagnostico dos providers e teste das cinco engines.
 - `GET /api/media/{id}/availability`: lojas disponiveis; esse resultado nunca alimenta o player.
 - `GET /api/playback/providers/status`: healthcheck dos providers.
+
+### Provider Registry e RedeCanais
+
+O `ProviderRegistry` registra providers dinamicamente, ordena pela prioridade e mantem metricas de requisicoes, sucessos, falhas, restricoes e tempo medio. O fallback atual segue Custom (100), RedeCanais (80), Archive (60), YouTube (40), Vimeo (30), Wikimedia (20) e PlenoFlu (10).
+
+O `RedeCanaisProvider` e experimental e permanece desativado por padrao. Os projetos Kodi citados foram usados somente como referencia da separacao pagina -> resolver -> player. Como nao foi encontrada uma API publica documentada com sinal verificavel de autorizacao/licenca, a CraftPlay nao extrai streams, tokens ou URLs internas dessas paginas. Quando ativado sem uma integracao oficialmente autorizada, o provider informa `NO_AUTHORIZED_PUBLIC_API` e o resolver continua no proximo provider.
+
+Para adicionar um provider futuro, implemente `PlaybackProvider`, atribua `name` e `priority`, retorne apenas `PlaybackSource` validado e registre a instancia no `ProviderRegistry`. URLs diretas autorizadas podem usar `MediaResolver`; embeds permitidos podem usar `EmbedResolver`. `HtmlResolver` deliberadamente nao extrai streams de paginas arbitrarias.
 
 ## 3. Como obter as chaves
 

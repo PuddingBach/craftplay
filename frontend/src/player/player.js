@@ -7,7 +7,7 @@ const formatTime = (seconds) => {
   return [hours || null, String(minutes).padStart(hours ? 2 : 1, "0"), String(secs).padStart(2, "0")].filter((part) => part !== null).join(":");
 };
 const escapeHTML = (value = "") => String(value).replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]);
-const controlledTypes = new Set(["mp4", "hls", "dash", "youtube", "vimeo"]);
+const controlledTypes = new Set(["mp4", "webm", "hls", "dash", "youtube", "vimeo"]);
 
 export class CraftPlayer {
   constructor(options) {

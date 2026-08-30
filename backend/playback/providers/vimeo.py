@@ -11,6 +11,7 @@ from backend.schemas import MediaItem, PlaybackSource
 
 class VimeoProvider(PlaybackProvider):
     name = "vimeo"
+    priority = 30
 
     def __init__(self):
         self.token = get_settings().vimeo_access_token

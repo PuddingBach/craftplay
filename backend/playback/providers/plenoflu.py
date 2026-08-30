@@ -28,6 +28,7 @@ class PlenoFluProvider(PlaybackProvider):
     """Official embed integration only; never extracts internal streams."""
 
     name = "plenoflu"
+    priority = 10
 
     def __init__(self):
         self._embed_allowed_until = 0.0

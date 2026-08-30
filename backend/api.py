@@ -56,6 +56,7 @@ def public_config():
         "discord_configured": bool(settings.discord_client_id and settings.discord_client_secret),
         "tmdb_configured": bool(settings.tmdb_api_key or settings.tmdb_read_access_token),
         "plenoflu_enabled": settings.plenoflu_enabled,
+        "redecanais_provider_enabled": settings.redecanais_provider_enabled,
     }
 
 

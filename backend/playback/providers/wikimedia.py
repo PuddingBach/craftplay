@@ -10,6 +10,7 @@ from backend.schemas import MediaItem, PlaybackSource
 
 class WikimediaProvider(PlaybackProvider):
     name = "wikimedia"
+    priority = 20
     api_url = "https://commons.wikimedia.org/w/api.php"
 
     async def search_sources(self, media: MediaItem, season: int = 0, episode: int = 0) -> list[dict]:

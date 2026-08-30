@@ -11,6 +11,7 @@ from backend.schemas import MediaItem, PlaybackSource
 
 class ArchiveProvider(PlaybackProvider):
     name = "archive"
+    priority = 60
     search_url = "https://archive.org/advancedsearch.php"
 
     async def search_sources(self, media: MediaItem, season: int = 0, episode: int = 0) -> list[dict]:

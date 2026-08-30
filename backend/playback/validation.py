@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 import httpx
 
 
-ALLOWED_TYPES = {"hls", "dash", "mp4", "embed", "youtube", "vimeo"}
+ALLOWED_TYPES = {"hls", "dash", "mp4", "webm", "embed", "youtube", "vimeo"}
 VIDEO_CONTENT_TYPES = ("video/", "application/vnd.apple.mpegurl", "application/x-mpegurl", "audio/mpegurl")
 
 
@@ -46,7 +46,11 @@ def embed_is_allowed(headers: httpx.Headers) -> bool:
     )
 
 
-async def validate_media_url(url: str, source_type: str, timeout: float = 10) -> tuple[bool, str]:
+async def validate_media_url(url: str, source_type: str, timeout: float | None = None) -> tuple[bool, str]:
+    if timeout is None:
+        from backend.config import get_settings
+
+        timeout = get_settings().playback_validation_timeout
     source_type = source_type.casefold()
     if source_type not in ALLOWED_TYPES or not is_public_https_url(url):
         return False, "URL HTTPS publica invalida"
@@ -75,7 +79,7 @@ async def validate_media_url(url: str, source_type: str, timeout: float = 10) ->
             return False, "Manifesto HLS invalido"
         if source_type == "dash" and not (b"<mpd" in body or "dash+xml" in content_type):
             return False, "Manifesto DASH invalido"
-        if source_type == "mp4" and not (content_type.startswith(VIDEO_CONTENT_TYPES) or b"ftyp" in body):
+        if source_type in {"mp4", "webm"} and not (content_type.startswith(VIDEO_CONTENT_TYPES) or b"ftyp" in body or b"webm" in body):
             return False, f"Conteudo nao e video ({content_type or 'sem MIME'})"
         if source_type in {"embed", "youtube", "vimeo"} and not embed_is_allowed(headers):
             return False, "Incorporacao bloqueada pelo servidor"
@@ -89,3 +93,17 @@ def normalized_title(value: str) -> str:
 
     value = unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode()
     return " ".join(re.findall(r"[a-z0-9]+", value.casefold()))
+
+
+def detect_source_type(url: str, content_type: str = "") -> str | None:
+    content_type = content_type.split(";", 1)[0].casefold()
+    path = urlparse(url).path.casefold()
+    if "mpegurl" in content_type or path.endswith(".m3u8"):
+        return "hls"
+    if "dash+xml" in content_type or path.endswith(".mpd"):
+        return "dash"
+    if content_type == "video/webm" or path.endswith(".webm"):
+        return "webm"
+    if content_type == "video/mp4" or path.endswith(".mp4"):
+        return "mp4"
+    return None

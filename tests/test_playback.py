@@ -3,8 +3,11 @@ import pytest
 from backend.database import init_db
 from backend.playback.providers.custom import CustomProvider
 from backend.playback.providers.plenoflu import PlenoFluProvider, build_plenoflu_episode_url, build_plenoflu_movie_url, validate_imdb_id
+from backend.playback.providers.redecanais import RedeCanaisProvider
+from backend.playback.matcher import MediaMatcher
+from backend.playback.registry import ProviderRegistry
 from backend.playback.resolver import PlaybackResolver
-from backend.playback.validation import is_public_https_url
+from backend.playback.validation import detect_source_type, is_public_https_url
 from backend.schemas import ExternalIds, MediaItem
 
 
@@ -27,6 +30,39 @@ def test_source_validation_rejects_local_and_insecure_urls():
     assert not is_public_https_url("http://media.w3.org/video.mp4")
     assert not is_public_https_url("https://127.0.0.1/video.mp4")
     assert not is_public_https_url("https://localhost/video.mp4")
+    assert detect_source_type("https://cdn.example/video.m3u8") == "hls"
+    assert detect_source_type("https://cdn.example/manifest", "application/dash+xml") == "dash"
+    assert detect_source_type("https://cdn.example/video.webm") == "webm"
+
+
+def test_media_matcher_requires_exact_episode():
+    item = MediaItem(id="anime:1", title="Attack on Titan", original_title="Shingeki no Kyojin",
+                     media_type="anime", year=2013, tags=["Shingeki no Kyojin"])
+    matcher = MediaMatcher()
+    accepted = matcher.match(item, {"title": "Shingeki no Kyojin", "year": 2013, "media_type": "anime", "season": 1, "episode": 3}, 1, 3)
+    rejected = matcher.match(item, {"title": "Attack on Titan", "year": 2013, "media_type": "anime", "season": 1, "episode": 4}, 1, 3)
+    assert accepted.accepted and accepted.score >= 70
+    assert not rejected.accepted and "episode_mismatch" in rejected.reasons
+
+
+def test_provider_registry_orders_and_toggles():
+    custom, redecanais = CustomProvider(), RedeCanaisProvider()
+    registry = ProviderRegistry([redecanais, custom])
+    assert registry.get_providers()[0].name == "custom"
+    registry.enable("redecanais")
+    assert [provider.name for provider in registry.get_providers()] == ["custom", "redecanais"]
+    registry.disable("redecanais")
+    assert "redecanais" not in [provider.name for provider in registry.get_providers()]
+
+
+@pytest.mark.asyncio
+async def test_redecanais_never_extracts_without_authorized_api(monkeypatch):
+    provider = RedeCanaisProvider()
+    provider.enabled = True
+    assert await provider.search_sources(media()) == []
+    assert provider.last_reason == "NO_AUTHORIZED_PUBLIC_API"
+    status = await provider.healthcheck()
+    assert not status["healthy"]
 
 
 @pytest.mark.asyncio
