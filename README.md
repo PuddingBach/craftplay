@@ -137,7 +137,7 @@ ENVIRONMENT=production
 PORT=8000
 ```
 
-`DISCORD_GUILD_ID` torna o registro de `/iniciar-player` imediato no servidor de testes. Sem ele, o comando é global. Adicione `DISCORD_REDIRECT_URI` na seção OAuth2 do Discord Developer Portal. Nunca envie `.env`, tokens LiveKit ou tokens Discord ao Git; o arquivo já está ignorado.
+`DISCORD_GUILD_ID` torna o registro de `/iniciar-player` imediato no servidor de testes. Sem ele, o comando é global. Adicione `DISCORD_REDIRECT_URI` na seção OAuth2 do Discord Developer Portal. Para a autenticação dentro da Discord Activity, cadastre também o redirect placeholder `https://127.0.0.1`, exigido pelo Embedded App SDK; o próprio Discord trata o retorno interno da Activity. Nunca envie `.env`, tokens LiveKit ou tokens Discord ao Git; o arquivo já está ignorado.
 
 ### Playback e disponibilidade
 

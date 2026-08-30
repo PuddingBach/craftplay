@@ -1,5 +1,15 @@
 import { DiscordSDK } from "@discord/embedded-app-sdk";
 
+export function resolveDiscordClientId(configuredClientId, hostname = location.hostname) {
+  const proxyClientId = hostname.endsWith(".discordsays.com") ? hostname.split(".")[0] : "";
+  return proxyClientId || configuredClientId || "";
+}
+
+function readableDiscordError(error) {
+  const message = error instanceof Error ? error.message : String(error || "erro desconhecido");
+  return message.length > 180 ? `${message.slice(0, 177)}...` : message;
+}
+
 export class DiscordActivity {
   constructor(api) {
     this.api = api;
@@ -13,9 +23,8 @@ export class DiscordActivity {
     const config = await this.api.config();
     this.config = config;
     if (window.self === window.top) return this.snapshot(false);
-    const proxyClientId = location.hostname.endsWith(".discordsays.com") ? location.hostname.split(".")[0] : "";
-    const clientId = config.discord_client_id || proxyClientId;
-    if (!clientId) return this.snapshot(false);
+    const clientId = resolveDiscordClientId(config.discord_client_id);
+    if (!clientId) throw new Error("Client ID da Discord Activity não configurado.");
     try {
       this.sdk = new DiscordSDK(clientId);
       await Promise.race([
@@ -29,10 +38,15 @@ export class DiscordActivity {
         prompt: "none",
         scope: ["identify"],
       });
+      if (!code) throw new Error("O Discord não retornou um código de autorização.");
       const session = await this.api.discordAuth(code);
+      if (!session?.access_token || !session?.discord_access_token || !session?.user) {
+        throw new Error("O servidor não concluiu a troca do código OAuth2.");
+      }
       this.api.setSession(session.access_token, session.user);
       this.user = session.user;
-      await this.sdk.commands.authenticate({ access_token: session.discord_access_token });
+      const authentication = await this.sdk.commands.authenticate({ access_token: session.discord_access_token });
+      if (!authentication) throw new Error("O Discord não confirmou a sessão da Activity.");
       this.instanceId = this.sdk.instanceId || this.sdk.channelId || this.instanceId;
       await this.sdk.subscribe("ACTIVITY_INSTANCE_PARTICIPANTS_UPDATE", ({ participants }) => {
         this.participants = participants || [];
@@ -40,8 +54,8 @@ export class DiscordActivity {
       });
       return this.snapshot(true);
     } catch (error) {
-      console.warn("Discord Activity indisponível; usando modo navegador.", error);
-      return this.snapshot(false);
+      console.error("Falha ao autenticar a Discord Activity.", error);
+      throw new Error(`Falha na autenticação da Discord Activity: ${readableDiscordError(error)}`);
     }
   }
 

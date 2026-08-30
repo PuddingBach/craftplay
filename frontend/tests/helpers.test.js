@@ -4,6 +4,7 @@ import { buildPlenoFluEpisodeUrl, buildPlenoFluMovieUrl, validateImdbId } from "
 import { adapterForSourceType } from "../src/player/controller.js";
 import { configureJWPlayer } from "../src/config/jwplayer.js";
 import { normalizePointer } from "../src/browser/remote-viewer.js";
+import { resolveDiscordClientId } from "../src/discord/activity.js";
 
 test("URLSearchParams codifica filtros de busca", () => {
   const params = new URLSearchParams({ q: "ficção científica", rating: "8" });
@@ -43,4 +44,9 @@ test("BrowserMode normaliza coordenadas e limita eventos fora da tela", () => {
   const box = { left: 100, top: 50, width: 1000, height: 500 };
   assert.deepEqual(normalizePointer(600, 300, box), { x: .5, y: .5 });
   assert.deepEqual(normalizePointer(-20, 900, box), { x: 0, y: 1 });
+});
+
+test("Discord Activity usa o Client ID do proxy como fonte autoritativa", () => {
+  assert.equal(resolveDiscordClientId("config-id", "activity-id.discordsays.com"), "activity-id");
+  assert.equal(resolveDiscordClientId("config-id", "craftplay.shardweb.app"), "config-id");
 });
