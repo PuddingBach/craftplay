@@ -123,11 +123,13 @@ Ou execute `docker compose up --build`.
 ## 7. Publicar na ShardCloud
 
 1. Crie um serviço web conectado a este repositório.
-2. Use o `Dockerfile` ou configure o build como `npm install && npm run build && pip install -r requirements.txt`.
-3. O comando de início é `uvicorn backend.main:app --host 0.0.0.0 --port $PORT` (também está no `Procfile`).
+2. O arquivo `.shardcloud` identifica `backend/main.py` como entrypoint Python, mesmo com o `package.json` do frontend presente.
+3. O comando de início instala o `requirements.txt` de modo defensivo e executa `python -m uvicorn backend.main:app --host 0.0.0.0 --port $PORT`. Ele já está definido em `.shardcloud`; o `Procfile` contém a variante para plataformas com etapa de build separada.
 4. Adicione um PostgreSQL e copie a URL para `DATABASE_URL`.
 5. Cadastre todas as variáveis de `.env.example` no painel; não faça upload do `.env`.
 6. Verifique `https://seu-dominio/api/health` e `https://seu-dominio/docs`.
+
+Se o log disser `uvicorn: not found` ou `No module named uvicorn`, faça um redeploy limpando o cache de dependências. Isso força a plataforma a reler o novo entrypoint Python e o `requirements.txt`.
 
 As tabelas são criadas de forma idempotente na inicialização. Para evolução de schema em uma operação maior, recomenda-se adicionar Alembic antes da primeira migração que altere dados existentes.
 
@@ -208,4 +210,3 @@ npm run build
 - Interações do bot exigem assinatura Ed25519 válida.
 - URLs do PlenoFlu são construídas internamente a partir de parâmetros estritamente validados.
 - O catálogo local usa Blender Open Movies; consulte os créditos/licenças dos projetos antes de redistribuir qualquer arquivo.
-

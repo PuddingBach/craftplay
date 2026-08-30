@@ -1,0 +1,7 @@
+DISPLAY_NAME=CraftPlay
+ENTRYPOINT=backend/main.py
+MEMORY=1024
+VERSION=recommended
+SUBDOMAIN=craftplay
+START=python -m pip install -r requirements.txt && python -m uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+DESCRIPTION=Discord Activity para assistir conteúdo aberto em grupo.
