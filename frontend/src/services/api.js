@@ -39,6 +39,14 @@ export class ApiClient {
   media(id) { return this.request(`/api/media/${encodeURIComponent(id)}`); }
   recommendations(id) { return this.request(`/api/media/${encodeURIComponent(id)}/recommendations`); }
   sources(id, season = 0, episode = 0) { return this.request(`/api/media/${encodeURIComponent(id)}/sources?season=${season}&episode=${episode}`); }
+  availability(id) { return this.request(`/api/media/${encodeURIComponent(id)}/availability`); }
+  providerStatus() { return this.request("/api/playback/providers/status"); }
+  debugProviders(payload, adminKey) { return this.request("/api/playback/debug", { method: "POST", headers: { "X-Admin-Key": adminKey }, body: JSON.stringify(payload) }); }
+  testSources(adminKey) { return this.request("/api/playback/test-sources", { headers: { "X-Admin-Key": adminKey } }); }
+  customSources(adminKey) { return this.request("/api/admin/sources", { headers: { "X-Admin-Key": adminKey } }); }
+  addCustomSource(payload, adminKey) { return this.request("/api/admin/sources", { method: "POST", headers: { "X-Admin-Key": adminKey }, body: JSON.stringify(payload) }); }
+  toggleCustomSource(id, enabled, adminKey) { return this.request(`/api/admin/sources/${id}?enabled=${enabled}`, { method: "PATCH", headers: { "X-Admin-Key": adminKey } }); }
+  deleteCustomSource(id, adminKey) { return this.request(`/api/admin/sources/${id}`, { method: "DELETE", headers: { "X-Admin-Key": adminKey } }); }
   history() { return this.request("/api/user/history"); }
   favorites() { return this.request("/api/user/favorites"); }
   addFavorite(media) { return this.request("/api/user/favorites", { method: "POST", body: JSON.stringify({ media_id: media.id, media_type: media.media_type }) }); }

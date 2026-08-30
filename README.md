@@ -60,6 +60,10 @@ DISCORD_GUILD_ID=servidor_de_teste_opcional
 DISCORD_ACTIVITY_URL=https://craftplay.shardweb.app
 TMDB_API_KEY=chave_tmdb_opcional
 TMDB_READ_ACCESS_TOKEN=token_de_leitura_tmdb_opcional
+YOUTUBE_API_KEY=chave_youtube_opcional
+VIMEO_ACCESS_TOKEN=token_vimeo_opcional
+ADMIN_API_KEY=gere_uma_chave_administrativa_longa
+PLAYBACK_CACHE_TTL_SECONDS=21600
 PLENOFLU_ENABLED=false
 DATABASE_URL=postgresql+psycopg://usuario:senha@host:5432/craftplay
 SECRET_KEY=gere-um-valor-aleatorio-longo
@@ -69,6 +73,15 @@ PORT=8000
 ```
 
 `DISCORD_GUILD_ID` torna o registro de `/iniciar-player` imediato no servidor de testes. Sem ele, o comando é global. Nunca envie `.env` ao Git; ele já está ignorado.
+
+### Playback e disponibilidade
+
+TMDB, AniList, Jikan e TVMaze fornecem somente metadados. As fontes reproduziveis vem exclusivamente dos Playback Providers e passam por validacao antes de chegar ao player.
+
+- `/admin/sources`: cadastro de fontes licenciadas manuais.
+- `/debug/providers`: diagnostico dos providers e teste das cinco engines.
+- `GET /api/media/{id}/availability`: lojas disponiveis; esse resultado nunca alimenta o player.
+- `GET /api/playback/providers/status`: healthcheck dos providers.
 
 ## 3. Como obter as chaves
 

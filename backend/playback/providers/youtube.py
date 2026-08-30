@@ -1,19 +1,74 @@
-from urllib.parse import parse_qs, urlparse
+import logging
+from difflib import SequenceMatcher
+
+import httpx
 
 from backend.playback.base import PlaybackProvider
-from backend.schemas import PlaybackSource
+from backend.config import get_settings
+from backend.playback.validation import normalized_title
+from backend.schemas import MediaItem, PlaybackSource
 
 
 class YouTubeProvider(PlaybackProvider):
-    name = "YouTube"
+    name = "youtube"
+    api_root = "https://www.googleapis.com/youtube/v3"
 
-    def __init__(self, mappings: dict[str, str] | None = None):
-        self.mappings = mappings or {}
+    def __init__(self):
+        self.api_key = get_settings().youtube_api_key
+        self.enabled = bool(self.api_key)
 
-    async def resolve(self, media_id: str, season: int = 0, episode: int = 0, **context) -> list[PlaybackSource]:
-        url = self.mappings.get(media_id)
-        if not url:
+    async def search_sources(self, media: MediaItem, season: int = 0, episode: int = 0) -> list[dict]:
+        if not self.enabled:
             return []
-        parsed = urlparse(url)
-        video_id = parse_qs(parsed.query).get("v", [parsed.path.rsplit("/", 1)[-1]])[0]
-        return [PlaybackSource(provider_name=self.name, media_id=media_id, source_type="EMBED", embed_url=f"https://www.youtube.com/embed/{video_id}")]
+        suffix = f" S{season:02d}E{episode:02d}" if season and episode else " full movie official"
+        params = {"part": "snippet", "q": f"{media.title}{suffix}", "type": "video", "maxResults": 5,
+                  "videoEmbeddable": "true", "videoSyndicated": "true", "videoLicense": "creativeCommon",
+                  "relevanceLanguage": "pt", "key": self.api_key}
+        try:
+            async with httpx.AsyncClient(timeout=12) as client:
+                response = await client.get(f"{self.api_root}/search", params=params)
+                response.raise_for_status()
+            return [{"video_id": item["id"]["videoId"], "title": item["snippet"]["title"]}
+                    for item in response.json().get("items", []) if item.get("id", {}).get("videoId")]
+        except (httpx.HTTPError, ValueError, KeyError) as exc:
+            logging.getLogger("craftplay.playback.youtube").warning("[YOUTUBE] Search failed: %s", exc)
+            return []
+
+    async def resolve(self, media: MediaItem, candidate: dict | None = None, season: int = 0, episode: int = 0) -> PlaybackSource | None:
+        if not self.enabled or not candidate or not candidate.get("video_id"):
+            return None
+        expected = normalized_title(f"{media.title} S{season:02d}E{episode:02d}" if season and episode else media.title)
+        if SequenceMatcher(None, expected, normalized_title(candidate.get("title", ""))).ratio() < 0.42:
+            return None
+        video_id = candidate["video_id"]
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                response = await client.get(f"{self.api_root}/videos", params={"part": "status", "id": video_id, "key": self.api_key})
+                response.raise_for_status()
+                items = response.json().get("items", [])
+                if not items:
+                    return None
+                status = items[0].get("status", {})
+                allowed = status.get("embeddable") is True and status.get("privacyStatus") == "public" and status.get("license") == "creativeCommon"
+                if not allowed:
+                    return None
+                embed_url = f"https://www.youtube.com/embed/{video_id}?enablejsapi=1"
+                oembed = await client.get("https://www.youtube.com/oembed", params={"url": f"https://www.youtube.com/watch?v={video_id}", "format": "json"})
+                if oembed.status_code != 200:
+                    return None
+            return PlaybackSource(provider=self.name, type="youtube", url=embed_url, media_id=media.id,
+                                  quality="auto", language="original", is_playable=True,
+                                  title=candidate.get("title"), license="Creative Commons",
+                                  metadata={"video_id": video_id})
+        except (httpx.HTTPError, ValueError):
+            return None
+
+    async def healthcheck(self) -> dict:
+        if not self.enabled:
+            return {"name": self.name, "enabled": False, "healthy": False, "reason": "YOUTUBE_API_KEY nao configurada"}
+        try:
+            async with httpx.AsyncClient(timeout=8) as client:
+                response = await client.get(f"{self.api_root}/videos", params={"part": "id", "id": "M7lc1UVf-VE", "key": self.api_key})
+            return {"name": self.name, "enabled": True, "healthy": response.status_code == 200, "status": response.status_code}
+        except httpx.HTTPError as exc:
+            return {"name": self.name, "enabled": True, "healthy": False, "error": str(exc)}

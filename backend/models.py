@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, JSON, String, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.database import Base
@@ -77,3 +77,42 @@ class RoomMember(Base):
     joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     user: Mapped[User] = relationship()
 
+
+class CustomSource(Base):
+    __tablename__ = "custom_sources"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    media_type: Mapped[str] = mapped_column(String(20), index=True)
+    media_id: Mapped[str] = mapped_column(String(100), index=True)
+    season: Mapped[int] = mapped_column(Integer, default=0)
+    episode: Mapped[int] = mapped_column(Integer, default=0)
+    provider: Mapped[str] = mapped_column(String(60), default="custom")
+    url: Mapped[str] = mapped_column(Text)
+    source_type: Mapped[str] = mapped_column(String(20))
+    language: Mapped[str] = mapped_column(String(20), default="original")
+    quality: Mapped[str] = mapped_column(String(20), default="auto")
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class PlaybackSourceCache(Base):
+    __tablename__ = "playback_source_cache"
+    __table_args__ = (UniqueConstraint("media_id", "season", "episode"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    media_id: Mapped[str] = mapped_column(String(100), index=True)
+    season: Mapped[int] = mapped_column(Integer, default=0)
+    episode: Mapped[int] = mapped_column(Integer, default=0)
+    sources: Mapped[list] = mapped_column(JSON, default=list)
+    checked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
+class WatchAvailabilityCache(Base):
+    __tablename__ = "watch_availability_cache"
+
+    media_id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    provider: Mapped[str] = mapped_column(String(50), default="tmdb")
+    sources: Mapped[list] = mapped_column(JSON, default=list)
+    checked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)

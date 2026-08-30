@@ -64,14 +64,39 @@ class AudioTrack(BaseModel):
 
 
 class PlaybackSource(BaseModel):
-    provider_name: str
+    provider: str
+    type: Literal["hls", "dash", "mp4", "embed", "youtube", "vimeo"]
+    url: str
     media_id: str
-    source_type: Literal["HLS", "DASH", "MP4", "EMBED"]
-    stream_url: str | None = None
-    embed_url: str | None = None
     subtitles: list[SubtitleTrack] = []
     audio_tracks: list[AudioTrack] = []
     quality: str = "auto"
+    language: str = "original"
+    is_playable: bool = False
+    title: str | None = None
+    license: str | None = None
+    metadata: dict = {}
+
+
+class CustomSourceCreate(BaseModel):
+    media_type: MediaType
+    media_id: str = Field(min_length=1, max_length=100)
+    season: int = Field(default=0, ge=0)
+    episode: int = Field(default=0, ge=0)
+    provider: str = Field(default="custom", min_length=1, max_length=60)
+    url: str
+    source_type: Literal["hls", "dash", "mp4", "embed", "youtube", "vimeo"]
+    language: str = Field(default="original", max_length=20)
+    quality: str = Field(default="auto", max_length=20)
+    enabled: bool = True
+
+
+class ProviderDebugRequest(BaseModel):
+    title: str = Field(min_length=2, max_length=200)
+    media_type: MediaType
+    year: int | None = Field(default=None, ge=1888, le=2200)
+    season: int = Field(default=0, ge=0)
+    episode: int = Field(default=0, ge=0)
 
 
 class FavoriteCreate(BaseModel):
@@ -115,4 +140,3 @@ class RoomView(BaseModel):
     subtitle: str | None
     audio_track: str | None
     updated_at: datetime
-

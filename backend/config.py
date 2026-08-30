@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     discord_activity_url: str = "https://craftplay.shardweb.app"
     tmdb_api_key: str = ""
     tmdb_read_access_token: str = ""
+    youtube_api_key: str = ""
+    vimeo_access_token: str = ""
+    admin_api_key: str = ""
+    playback_cache_ttl_seconds: int = 21600
     plenoflu_enabled: bool = False
     database_url: str = "sqlite:///./craftplay.db"
     redis_url: str = ""

@@ -4,7 +4,7 @@ import time
 import httpx
 
 from backend.playback.base import PlaybackProvider
-from backend.schemas import PlaybackSource
+from backend.schemas import MediaItem, PlaybackSource
 
 
 IMDB_PATTERN = re.compile(r"^tt\d{5,12}$")
@@ -51,10 +51,15 @@ class PlenoFluProvider(PlaybackProvider):
         self._embed_allowed_until = time.monotonic() + 600
         return allowed
 
-    async def resolve(self, media_id: str, season: int = 0, episode: int = 0, **context) -> list[PlaybackSource]:
-        imdb_id = context.get("imdb_id")
-        media_type = context.get("media_type")
+    async def search_sources(self, media: MediaItem, season: int = 0, episode: int = 0) -> list[dict]:
+        imdb_id = media.external_ids.imdb
+        media_type = "tv" if media.media_type in {"series", "anime", "cartoon"} else "movie"
         url = build_plenoflu_movie_url(imdb_id) if media_type == "movie" else build_plenoflu_episode_url(imdb_id, season, episode)
+        return [{"url": url, "type": "embed"}] if url else []
+
+    async def resolve(self, media: MediaItem, candidate: dict | None = None, season: int = 0, episode: int = 0) -> PlaybackSource | None:
+        url = candidate.get("url") if candidate else None
         if not url or not await self._embed_allowed(url):
-            return []
-        return [PlaybackSource(provider_name=self.name, media_id=media_id, source_type="EMBED", embed_url=url, quality="externo")]
+            return None
+        return PlaybackSource(provider=self.name, media_id=media.id, type="embed", url=url,
+                              quality="externo", is_playable=True)

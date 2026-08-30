@@ -1,3 +1,4 @@
+import secrets
 from datetime import datetime, timezone
 
 from cryptography.exceptions import InvalidSignature
@@ -9,15 +10,26 @@ from sqlalchemy.orm import Session
 from backend.auth import create_access_token, current_user, exchange_discord_code, upsert_user
 from backend.config import get_settings
 from backend.database import get_db
-from backend.models import Favorite, Room, RoomMember, User, WatchHistory
+from backend.models import CustomSource, Favorite, Room, RoomMember, User, WatchHistory
 from backend.playback import PlaybackResolver
+from backend.playback.validation import validate_media_url
 from backend.providers import CatalogService
-from backend.schemas import DiscordAuthRequest, FavoriteCreate, ProgressCreate, RoomCreate, RoomView
+from backend.providers.watch_availability import WatchAvailabilityProvider
+from backend.schemas import CustomSourceCreate, DiscordAuthRequest, ExternalIds, FavoriteCreate, MediaItem, ProgressCreate, ProviderDebugRequest, RoomCreate, RoomView
 
 
 router = APIRouter(prefix="/api")
 catalog = CatalogService()
 playback = PlaybackResolver()
+availability = WatchAvailabilityProvider()
+
+
+def require_admin(x_admin_key: str = Header(default="")):
+    expected = get_settings().admin_api_key
+    if not expected:
+        raise HTTPException(status_code=503, detail="ADMIN_API_KEY nao configurada")
+    if not secrets.compare_digest(x_admin_key, expected):
+        raise HTTPException(status_code=401, detail="Chave administrativa invalida")
 
 
 @router.get("/health")
@@ -110,16 +122,94 @@ async def sources(media_id: str, season: int = 0, episode: int = 0, user: User =
     item = await catalog.details(media_id)
     if not item:
         raise HTTPException(status_code=404, detail="Conteúdo não encontrado")
-    provider_type = "tv" if item.media_type in {"series", "anime", "cartoon"} else "movie"
-    resolved = await playback.resolve(media_id, season, episode, imdb_id=item.external_ids.imdb, media_type=provider_type)
+    resolved = await playback.resolve(item, season, episode)
     unavailable = []
     settings = get_settings()
-    if settings.plenoflu_enabled and item.external_ids.imdb and not any(source.provider_name == "PlenoFlu" for source in resolved):
+    if settings.plenoflu_enabled and item.external_ids.imdb and not any(source.provider == "PlenoFlu" for source in resolved):
         unavailable.append({
             "provider_name": "PlenoFlu",
             "message": "O PlenoFlu recusou a incorporação deste conteúdo. A proteção do serviço foi respeitada e nenhuma tentativa de contorno foi realizada.",
         })
     return {"sources": resolved, "unavailable": unavailable}
+
+
+@router.get("/media/{media_id:path}/availability")
+async def media_availability(media_id: str, user: User = Depends(current_user)):
+    item = await catalog.details(media_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Conteudo nao encontrado")
+    try:
+        return await availability.get(item)
+    except Exception as exc:
+        return {"provider": "tmdb", "region": "BR", "items": [], "error": f"{type(exc).__name__}: {exc}"}
+
+
+@router.get("/playback/providers/status")
+async def provider_status():
+    return {"providers": await playback.status()}
+
+
+@router.post("/playback/debug")
+async def provider_debug(payload: ProviderDebugRequest, _: None = Depends(require_admin)):
+    media = MediaItem(id="debug:query", title=payload.title, original_title=payload.title,
+                      media_type=payload.media_type, year=payload.year, external_ids=ExternalIds())
+    return {"query": payload.model_dump(), "providers": await playback.debug(media, payload.season, payload.episode)}
+
+
+@router.get("/playback/test-sources")
+async def test_sources(_: None = Depends(require_admin)):
+    candidates = [
+        {"provider": "W3C", "type": "mp4", "url": "https://media.w3.org/2010/05/sintel/trailer.mp4", "media_id": "test:mp4", "quality": "720p", "language": "original"},
+        {"provider": "Mux test stream", "type": "hls", "url": "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8", "media_id": "test:hls", "quality": "auto", "language": "original"},
+        {"provider": "Shaka demo assets", "type": "dash", "url": "https://storage.googleapis.com/shaka-demo-assets/angel-one/dash.mpd", "media_id": "test:dash", "quality": "auto", "language": "original"},
+        {"provider": "YouTube API demo", "type": "youtube", "url": "https://www.youtube.com/embed/M7lc1UVf-VE?enablejsapi=1", "media_id": "test:youtube", "quality": "auto", "language": "original", "metadata": {"video_id": "M7lc1UVf-VE"}},
+        {"provider": "Vimeo SDK demo", "type": "vimeo", "url": "https://player.vimeo.com/video/59777392", "media_id": "test:vimeo", "quality": "auto", "language": "original", "metadata": {"video_id": "59777392"}},
+    ]
+    results = []
+    for candidate in candidates:
+        valid, reason = await validate_media_url(candidate["url"], candidate["type"])
+        results.append({**candidate, "is_playable": valid, "validation": reason})
+    return {"sources": results}
+
+
+@router.get("/admin/sources")
+def list_custom_sources(_: None = Depends(require_admin), db: Session = Depends(get_db)):
+    return {"items": db.scalars(select(CustomSource).order_by(CustomSource.created_at.desc())).all()}
+
+
+@router.post("/admin/sources", status_code=201)
+async def create_custom_source(payload: CustomSourceCreate, _: None = Depends(require_admin), db: Session = Depends(get_db)):
+    valid, reason = await validate_media_url(payload.url, payload.source_type)
+    if not valid:
+        raise HTTPException(status_code=422, detail=f"Fonte recusada: {reason}")
+    row = CustomSource(**payload.model_dump())
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    playback.invalidate(payload.media_id)
+    return row
+
+
+@router.patch("/admin/sources/{source_id}")
+def toggle_custom_source(source_id: int, enabled: bool, _: None = Depends(require_admin), db: Session = Depends(get_db)):
+    row = db.get(CustomSource, source_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Fonte nao encontrada")
+    row.enabled = enabled
+    db.commit()
+    playback.invalidate(row.media_id)
+    return row
+
+
+@router.delete("/admin/sources/{source_id}", status_code=204)
+def delete_custom_source(source_id: int, _: None = Depends(require_admin), db: Session = Depends(get_db)):
+    row = db.get(CustomSource, source_id)
+    if row:
+        media_id = row.media_id
+        db.delete(row)
+        db.commit()
+        playback.invalidate(media_id)
+    return Response(status_code=204)
 
 
 @router.get("/media/{media_id:path}")

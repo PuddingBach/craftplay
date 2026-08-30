@@ -3,6 +3,7 @@ import { ApiClient } from "./services/api.js";
 import { DiscordActivity } from "./discord/activity.js";
 import { RoomSync } from "./services/room.js";
 import { CraftPlayer } from "./player/player.js";
+import { initSpecialPage } from "./diagnostics.js";
 
 const api = new ApiClient();
 const discord = new DiscordActivity(api);
@@ -144,13 +145,14 @@ async function showDetails(id) {
   root.innerHTML = `<div class="modal-shell"><div class="detail-modal"><div class="detail-hero skeleton"></div><div class="detail-body">carregando_metadados()</div></div></div>`;
   document.body.classList.add("modal-open");
   try {
-    const [media, recommended] = await Promise.all([api.media(id), api.recommendations(id)]);
+    const [media, recommended, availability] = await Promise.all([api.media(id), api.recommendations(id), api.availability(id).catch(() => ({ items: [] }))]);
     state.all.set(media.id, media);
     const favorite = state.favorites.has(media.id);
     root.innerHTML = `<div class="modal-shell"><article class="detail-modal" role="dialog" aria-modal="true" aria-label="${escapeHTML(media.title)}">
       <div class="detail-hero"><img src="${escapeHTML(assetURL(media.backdrop || media.poster) || fallbackImage)}" alt=""><button class="icon-btn modal-close" aria-label="Fechar">✕</button><div class="detail-title"><span class="eyebrow">&lt;${media.media_type}/&gt;</span><h2>${escapeHTML(media.title)}</h2><div class="meta"><span class="tag gold">★ ${Number(media.rating).toFixed(1)}</span><span class="tag purple">${media.year || "—"}</span>${media.genres.map((genre) => `<span class="tag">${escapeHTML(genre)}</span>`).join("")}</div></div></div>
       <div class="detail-body"><div class="detail-layout"><div><span class="mono prompt">&gt; sinopse</span><p>${escapeHTML(media.overview || "Sinopse não disponível.")}</p><div class="action-row"><button class="btn btn-primary" data-watch="${escapeHTML(media.id)}">▶ Assistir</button>${media.trailer ? `<a class="btn btn-ghost" href="${escapeHTML(media.trailer)}" target="_blank" rel="noopener">Trailer</a>` : ""}<button class="btn btn-ghost" data-favorite="${escapeHTML(media.id)}">${favorite ? "✓ Na Minha Lista" : "+ Minha Lista"}</button></div></div>
       <aside class="facts"><div><b>título_original:</b> ${escapeHTML(media.original_title || media.title)}</div><div><b>duração:</b> ${media.duration ? `${media.duration} min` : "não informada"}</div><div><b>status:</b> ${escapeHTML(media.status || "não informado")}</div><div><b>direção:</b> ${escapeHTML(media.director || "não informada")}</div><div><b>elenco:</b> ${escapeHTML(media.cast?.join(", ") || "não informado")}</div><div><b>classificação:</b> ${escapeHTML(media.certification || "não informada")}</div></aside></div>
+      ${availability.items?.length ? `<section class="availability"><span class="mono prompt">&gt; disponível_em (informativo)</span><div>${availability.items.map((service) => `<span class="availability-item">${service.logo ? `<img src="${escapeHTML(service.logo)}" alt="">` : ""}${escapeHTML(service.name)} <small>${escapeHTML(service.offer_type)}</small></span>`).join("")}</div><small>Estas opções não são enviadas ao player.</small></section>` : ""}
       ${seasonsTemplate(media)}
       ${recommended.items?.length ? `<section class="season-picker"><span class="mono prompt">&gt; recomendações</span><div class="media-track" style="padding-inline:0">${recommended.items.map((item) => mediaCard(item)).join("")}</div></section>` : ""}
       </div></article></div>`;
@@ -183,12 +185,15 @@ async function toggleFavorite(id, button) {
 }
 
 async function startWatching(id, season = 0, episode = 0) {
+  playerMount.innerHTML = `<section class="player-layer"><div class="boot-screen"><span class="brand-mark">▶</span><h2>Procurando fonte...</h2><p class="mono">playback_resolver.search()</p></div></section>`;
+  document.body.classList.add("modal-open");
   try {
     const [media, result] = await Promise.all([api.media(id), api.sources(id, season, episode)]);
     if (!state.room) state.room = await api.createRoom(state.session.instanceId);
     if (!state.roomSync) { state.roomSync = new RoomSync(state.room, state.session.user); state.roomSync.connect(); }
     const mediaChange = () => state.roomSync.send("MEDIA_CHANGE", { media_id: id, season, episode });
-    if (!mediaChange()) state.roomSync.addEventListener("open", mediaChange, { once: true });
+    if (state.roomSync.socket?.readyState === WebSocket.OPEN) mediaChange();
+    else state.roomSync.addEventListener("open", mediaChange, { once: true });
     state.currentPlayer?.destroy();
     state.currentPlayer = new CraftPlayer({
       mount: playerMount, media, sources: result.sources, unavailable: result.unavailable, roomSync: state.roomSync, api, season, episode,
@@ -196,7 +201,7 @@ async function startWatching(id, season = 0, episode = 0) {
       onEpisode: (nextSeason, nextEpisode) => { state.currentPlayer?.destroy(); startWatching(id, nextSeason, nextEpisode); },
     });
     document.body.classList.add("modal-open");
-  } catch (error) { toast(`Não foi possível abrir o player: ${error.message}`, true); }
+  } catch (error) { playerMount.innerHTML = ""; document.body.classList.remove("modal-open"); toast(`Não foi possível abrir o player: ${error.message}`, true); }
 }
 
 async function performSearch(query) {
@@ -254,6 +259,7 @@ async function loadUserCollections() {
 }
 
 async function init() {
+  if (initSpecialPage(api)) return;
   try {
     const activity = await discord.initialize();
     const home = await api.home();

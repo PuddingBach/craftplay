@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@discord/embedded-app-sdk": "^2.2.0",
+    "@vimeo/player": "^2.30.4",
     "hls.js": "^1.6.10",
     "shaka-player": "^4.15.9"
   },
