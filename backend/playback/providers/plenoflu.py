@@ -27,7 +27,7 @@ def build_plenoflu_episode_url(imdb_id: str | None, season: int, episode: int) -
 class PlenoFluProvider(PlaybackProvider):
     """Official embed integration only; never extracts internal streams."""
 
-    name = "PlenoFlu"
+    name = "plenoflu"
 
     def __init__(self):
         self._embed_allowed_until = 0.0
@@ -63,3 +63,15 @@ class PlenoFluProvider(PlaybackProvider):
             return None
         return PlaybackSource(provider=self.name, media_id=media.id, type="embed", url=url,
                               quality="externo", is_playable=True)
+
+    async def healthcheck(self) -> dict:
+        try:
+            async with httpx.AsyncClient(follow_redirects=True, timeout=8) as client:
+                response = await client.head("https://plenoflu.com")
+            xframe = response.headers.get("x-frame-options", "").casefold()
+            csp = response.headers.get("content-security-policy", "").casefold()
+            embeddable = "deny" not in xframe and "sameorigin" not in xframe and "frame-ancestors 'self'" not in csp
+            return {"name": self.name, "enabled": True, "healthy": response.is_success and embeddable,
+                    "status": response.status_code, "reason": None if embeddable else "Incorporacao bloqueada pelo servidor"}
+        except httpx.HTTPError as exc:
+            return {"name": self.name, "enabled": True, "healthy": False, "error": str(exc)}

@@ -125,7 +125,7 @@ async def sources(media_id: str, season: int = 0, episode: int = 0, user: User =
     resolved = await playback.resolve(item, season, episode)
     unavailable = []
     settings = get_settings()
-    if settings.plenoflu_enabled and item.external_ids.imdb and not any(source.provider == "PlenoFlu" for source in resolved):
+    if settings.plenoflu_enabled and item.external_ids.imdb and not any(source.provider == "plenoflu" for source in resolved):
         unavailable.append({
             "provider_name": "PlenoFlu",
             "message": "O PlenoFlu recusou a incorporação deste conteúdo. A proteção do serviço foi respeitada e nenhuma tentativa de contorno foi realizada.",
