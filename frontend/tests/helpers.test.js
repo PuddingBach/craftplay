@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { buildPlenoFluEpisodeUrl, buildPlenoFluMovieUrl, validateImdbId } from "../src/services/plenoflu.js";
 import { adapterForSourceType } from "../src/player/controller.js";
 import { configureJWPlayer } from "../src/config/jwplayer.js";
-import { normalizePointer } from "../src/browser/remote-viewer.js";
+import { normalizePointer, shouldUseLiveKit } from "../src/browser/remote-viewer.js";
 import { resolveDiscordClientId } from "../src/discord/activity.js";
 
 test("URLSearchParams codifica filtros de busca", () => {
@@ -49,4 +49,9 @@ test("BrowserMode normaliza coordenadas e limita eventos fora da tela", () => {
 test("Discord Activity usa o Client ID do proxy como fonte autoritativa", () => {
   assert.equal(resolveDiscordClientId("config-id", "activity-id.discordsays.com"), "activity-id");
   assert.equal(resolveDiscordClientId("config-id", "craftplay.shardweb.app"), "config-id");
+});
+
+test("LiveKit só é usado quando SFU e publisher estão saudáveis", () => {
+  assert.equal(shouldUseLiveKit({ livekit: { status: "healthy" }, sfu: "healthy", publisher: "unavailable", webrtc: "unavailable" }), false);
+  assert.equal(shouldUseLiveKit({ livekit: { status: "healthy" }, sfu: "healthy", publisher: "healthy", webrtc: "healthy" }), true);
 });

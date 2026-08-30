@@ -5,6 +5,10 @@ export function normalizePointer(clientX, clientY, box) {
   };
 }
 
+export function shouldUseLiveKit(status) {
+  return status?.livekit?.status === "healthy" && status?.sfu === "healthy" && status?.publisher === "healthy" && status?.webrtc === "healthy";
+}
+
 export class RemoteBrowserViewer extends EventTarget {
   constructor({ mount, roomSync, api, roomId, user }) {
     super();
@@ -21,25 +25,31 @@ export class RemoteBrowserViewer extends EventTarget {
 
   async connect() {
     this.roomSync.addEventListener("message", this.boundMessage);
-    try {
-      const { Room, RoomEvent, Track } = await import("livekit-client");
-      const credentials = await this.api.browserStreamToken(this.roomId);
-      this.livekit = new Room({ adaptiveStream: true, dynacast: true });
-      this.livekit.on(RoomEvent.TrackSubscribed, (track) => {
-        if (track.kind === Track.Kind.Video || track.kind === Track.Kind.Audio) {
-          const element = track.attach();
-          element.autoplay = true;
-          if (track.kind === Track.Kind.Video) element.className = "remote-video";
-          this.mount.querySelector(".remote-media").append(element);
-          this.mount.querySelector(".stream-state").textContent = "Transmissão conectada";
-        }
-      });
-      this.livekit.on(RoomEvent.TrackUnsubscribed, (track) => track.detach().forEach((element) => element.remove()));
-      this.livekit.on(RoomEvent.Disconnected, () => this.setStatus("Transmissão desconectada"));
-      await this.livekit.connect(credentials.url, credentials.token, { autoSubscribe: true });
-      this.setStatus("Aguardando transmissão do navegador...");
-    } catch (error) {
-      this.setStatus(error.message || "WebRTC indisponível");
+    const status = await this.api.browserStatus().catch(() => null);
+    if (shouldUseLiveKit(status)) {
+      try {
+        const { Room, RoomEvent, Track } = await import("livekit-client");
+        const credentials = await this.api.browserStreamToken(this.roomId);
+        this.livekit = new Room({ adaptiveStream: true, dynacast: true });
+        this.livekit.on(RoomEvent.TrackSubscribed, (track) => {
+          if (track.kind === Track.Kind.Video || track.kind === Track.Kind.Audio) {
+            const element = track.attach();
+            element.autoplay = true;
+            if (track.kind === Track.Kind.Video) element.className = "remote-video";
+            this.mount.querySelector(".remote-media").append(element);
+            this.mount.querySelector(".stream-state").textContent = "Transmissão conectada";
+          }
+        });
+        this.livekit.on(RoomEvent.TrackUnsubscribed, (track) => track.detach().forEach((element) => element.remove()));
+        this.livekit.on(RoomEvent.Disconnected, () => this.setStatus("Transmissão desconectada"));
+        await this.livekit.connect(credentials.url, credentials.token, { autoSubscribe: true });
+        this.setStatus("Aguardando transmissão do navegador...");
+      } catch (error) {
+        console.warn("LiveKit indisponível; mantendo screencast WebSocket.", error);
+        this.setStatus("Conectando screencast do navegador...");
+      }
+    } else {
+      this.setStatus("Conectando screencast do navegador...");
     }
     this.bindInput();
   }
