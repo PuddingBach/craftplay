@@ -3,6 +3,7 @@ import shutil
 from dataclasses import dataclass
 
 from backend.config import get_settings
+from backend.browser.livekit import livekit_api_url
 
 try:
     from livekit import api as livekit_api
@@ -32,7 +33,7 @@ class BrowserPublisher:
         if self.status() != "healthy" or room_id in self.runtimes:
             return self.runtimes.get(room_id)
         async with livekit_api.LiveKitAPI(
-            self.settings.livekit_url.replace("wss://", "https://").replace("ws://", "http://"),
+            livekit_api_url(),
             self.settings.livekit_api_key,
             self.settings.livekit_api_secret,
         ) as client:
@@ -69,7 +70,7 @@ class BrowserPublisher:
         if livekit_api and self.settings.livekit_url:
             try:
                 async with livekit_api.LiveKitAPI(
-                    self.settings.livekit_url.replace("wss://", "https://").replace("ws://", "http://"),
+                    livekit_api_url(),
                     self.settings.livekit_api_key, self.settings.livekit_api_secret,
                 ) as client:
                     await client.ingress.delete_ingress(livekit_api.DeleteIngressRequest(ingress_id=runtime.ingress_id))

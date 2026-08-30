@@ -10,7 +10,7 @@ from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
 
 from backend.auth import current_dashboard_admin, current_user
-from backend.browser.livekit import create_viewer_token, livekit_configured
+from backend.browser.livekit import create_viewer_token, livekit_configured, livekit_health
 from backend.browser.security import validate_public_url
 from backend.browser.service import browser_service
 from backend.browser.state import browser_state_store
@@ -111,8 +111,12 @@ def entry(entry_id: int, user: User = Depends(current_user), db: Session = Depen
 async def browser_status():
     status = await browser_service.status()
     configured = livekit_configured()
+    livekit = await livekit_health()
     publisher_ready = status.get("publisher") == "healthy"
-    return {**status, "state_store": browser_state_store.backend, "webrtc": "healthy" if configured and publisher_ready else "unavailable", "sfu": "configured" if configured else "unavailable"}
+    sfu_ready = livekit["status"] == "healthy"
+    return {**status, "state_store": browser_state_store.backend, "livekit": livekit,
+            "webrtc": "healthy" if configured and sfu_ready and publisher_ready else "unavailable",
+            "sfu": "healthy" if sfu_ready else livekit["status"]}
 
 
 @router.get("/capabilities")

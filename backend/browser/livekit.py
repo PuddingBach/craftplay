@@ -1,3 +1,5 @@
+import asyncio
+import time
 from datetime import datetime, timedelta, timezone
 
 from jose import jwt
@@ -5,9 +7,36 @@ from jose import jwt
 from backend.config import get_settings
 
 
+_health_cache = {"checked_at": 0.0, "status": "unknown", "error": ""}
+
+
 def livekit_configured() -> bool:
     settings = get_settings()
     return bool(settings.livekit_url and settings.livekit_api_key and settings.livekit_api_secret)
+
+
+def livekit_api_url() -> str:
+    return get_settings().livekit_url.replace("wss://", "https://", 1).replace("ws://", "http://", 1)
+
+
+async def livekit_health() -> dict[str, str]:
+    if not livekit_configured():
+        return {"status": "unavailable", "error": "not_configured"}
+    now = time.monotonic()
+    if now - float(_health_cache["checked_at"]) < 30:
+        return {"status": str(_health_cache["status"]), "error": str(_health_cache["error"])}
+    try:
+        from livekit import api
+        settings = get_settings()
+        async with api.LiveKitAPI(livekit_api_url(), settings.livekit_api_key, settings.livekit_api_secret) as client:
+            await asyncio.wait_for(client.room.list_rooms(api.ListRoomsRequest()), timeout=10)
+        status, error = "healthy", ""
+    except Exception as exc:
+        response_status = getattr(exc, "status", None)
+        status = "invalid_credentials" if response_status in {401, 403} else "unreachable"
+        error = f"http_{response_status}" if response_status else type(exc).__name__
+    _health_cache.update({"checked_at": now, "status": status, "error": error})
+    return {"status": status, "error": error}
 
 
 def create_viewer_token(room_name: str, identity: str, name: str, *, can_publish: bool = False) -> str:
@@ -39,8 +68,7 @@ async def set_room_privacy(room_name: str, host_identity: str, enabled: bool) ->
     try:
         from livekit import api
         settings = get_settings()
-        api_url = settings.livekit_url.replace("wss://", "https://").replace("ws://", "http://")
-        async with api.LiveKitAPI(api_url, settings.livekit_api_key, settings.livekit_api_secret) as client:
+        async with api.LiveKitAPI(livekit_api_url(), settings.livekit_api_key, settings.livekit_api_secret) as client:
             response = await client.room.list_participants(api.ListParticipantsRequest(room=room_name))
             for participant in response.participants:
                 if participant.identity == host_identity or participant.identity.startswith("browser-"):

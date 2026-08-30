@@ -103,6 +103,16 @@ class Settings(BaseSettings):
             return value.replace("postgresql://", "postgresql+psycopg://", 1)
         return value
 
+    @field_validator("livekit_url")
+    @classmethod
+    def normalize_livekit_url(cls, value: str) -> str:
+        normalized = value.strip().rstrip("/")
+        if normalized.startswith("https://"):
+            return "wss://" + normalized.removeprefix("https://")
+        if normalized.startswith("http://"):
+            return "ws://" + normalized.removeprefix("http://")
+        return normalized
+
 
 @lru_cache
 def get_settings() -> Settings:

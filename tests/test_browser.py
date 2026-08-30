@@ -183,6 +183,11 @@ def test_database_fallback_has_safe_local_default():
     assert settings.database_fallback_url.startswith("sqlite:///")
 
 
+def test_livekit_http_url_is_normalized_for_websocket_clients():
+    settings = Settings(_env_file=None, livekit_url="https://project.livekit.cloud/")
+    assert settings.livekit_url == "wss://project.livekit.cloud"
+
+
 @pytest.mark.asyncio
 async def test_room_participant_limit_is_atomic(monkeypatch):
     settings = get_settings()
