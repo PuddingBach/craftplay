@@ -16,7 +16,7 @@ from backend.providers.anime_resolver import AnimeMetadataResolver
 
 log = logging.getLogger("craftplay.playback")
 QUALITY_ORDER = {"1080p": 0, "720p": 1, "480p": 2, "360p": 3, "original": 4, "auto": 5}
-VALIDATION_VERSION = 2
+VALIDATION_VERSION = 3
 
 
 def _aware(value: datetime) -> datetime:
