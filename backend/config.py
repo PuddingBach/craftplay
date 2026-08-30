@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     discord_guild_id: str = ""
     discord_activity_url: str = "https://craftplay.shardweb.app"
     tmdb_api_key: str = ""
+    tmdb_read_access_token: str = ""
     plenoflu_enabled: bool = False
     database_url: str = "sqlite:///./craftplay.db"
     redis_url: str = ""

@@ -13,10 +13,12 @@ document.body.append(playerMount);
 const labels = { movie: "Filmes", series: "Séries", anime: "Animes", cartoon: "Desenhos" };
 const sectionLabels = { trending: "Em alta", movies: "Filmes populares", series: "Séries populares", anime: "Animes", cartoons: "Desenhos", releases: "Lançamentos", continue: "Continuar assistindo", favorites: "Minha lista", recommended: "Recomendados para você" };
 const state = { session: null, sections: {}, all: new Map(), category: "all", query: "", genre: "", year: "", rating: "", sort: "popularity", favorites: new Set(), history: new Map(), room: null, roomSync: null, currentPlayer: null };
+const discordProxyPrefix = location.hostname.endsWith(".discordsays.com") ? "/.proxy" : "";
 
 const escapeHTML = (value = "") => String(value).replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]);
 const fallbackImage = "data:image/svg+xml," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="400" height="600"><defs><linearGradient id="g"><stop stop-color="#1c4fd8"/><stop offset="1" stop-color="#8a3ffc"/></linearGradient></defs><rect width="100%" height="100%" fill="url(#g)"/><text x="50%" y="50%" text-anchor="middle" fill="white" font-family="monospace" font-size="34">&lt;/&gt;</text></svg>`);
 const debounce = (fn, delay = 260) => { let timer; return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), delay); }; };
+const assetURL = (url) => url?.startsWith("/") ? `${discordProxyPrefix}${url}` : url;
 
 function toast(message, error = false) {
   const item = document.createElement("div");
@@ -34,6 +36,10 @@ function avatar(user, extra = "") {
 
 function shell() {
   const user = state.session.user;
+  const warnings = [];
+  if (!state.session.config?.discord_configured) warnings.push("Discord OAuth não configurado: defina DISCORD_CLIENT_ID e DISCORD_CLIENT_SECRET na hospedagem.");
+  if (!state.providers?.tmdb_configured) warnings.push("TMDB não configurado: defina TMDB_READ_ACCESS_TOKEN para importar o catálogo completo.");
+  else if (!state.providers?.tmdb_available) warnings.push(`TMDB indisponível: ${state.providers.tmdb_error || "verifique a credencial"}.`);
   app.innerHTML = `
     <header class="app-header">
       <button class="logo" data-nav="all" aria-label="Início"><span class="logo-ring">&lt;/&gt;</span><span class="logo-copy"><span class="logo-name">craft<em>play</em></span><span class="logo-tag">criamos soluções · construímos o futuro</span></span></button>
@@ -51,6 +57,7 @@ function shell() {
         <button class="icon-btn mobile-toggle" aria-label="Abrir menu">☰</button>
       </div>
     </header>
+    ${warnings.length ? `<aside class="setup-warning"><b>Configuração incompleta</b>${warnings.map((warning) => `<span>${escapeHTML(warning)}</span>`).join("")}</aside>` : ""}
     <div id="hero"></div>
     <div class="filter-bar" aria-label="Filtros">
       <button class="chip active" data-filter-type="all">Todos</button>
@@ -74,7 +81,7 @@ function mediaCard(media, progress = null) {
   return `<article class="media-card">
     <button class="card-hit" data-media-id="${escapeHTML(media.id)}" aria-label="Ver ${escapeHTML(media.title)}">
       <div class="poster-wrap">
-        <img src="${escapeHTML(media.poster || fallbackImage)}" alt="Capa de ${escapeHTML(media.title)}" loading="lazy" onerror="this.src='${fallbackImage}'">
+        <img src="${escapeHTML(assetURL(media.poster) || fallbackImage)}" alt="Capa de ${escapeHTML(media.title)}" loading="lazy" onerror="this.src='${fallbackImage}'">
         <span class="card-badge">&lt;${escapeHTML(media.media_type)}/&gt;</span><span class="card-badge card-rating">★ ${Number(media.rating || 0).toFixed(1)}</span>
       </div>
       ${progress ? `<div class="progress" title="${Math.round(progress * 100)}% assistido"><span style="width:${Math.min(100, progress * 100)}%"></span></div>` : ""}
@@ -88,7 +95,7 @@ function renderHero() {
   const target = document.querySelector("#hero");
   if (!featured) { target.innerHTML = ""; return; }
   target.innerHTML = `<section class="hero">
-    <img class="hero-bg" src="${escapeHTML(featured.backdrop || featured.poster || fallbackImage)}" alt="" onerror="this.src='${fallbackImage}'">
+    <img class="hero-bg" src="${escapeHTML(assetURL(featured.backdrop || featured.poster) || fallbackImage)}" alt="" onerror="this.src='${fallbackImage}'">
     <div class="hero-content"><span class="eyebrow"><span class="live-dot"></span>destaque_do_catálogo</span><h1>${escapeHTML(featured.title)}</h1>
       <div class="meta"><span class="tag gold">★ ${Number(featured.rating).toFixed(1)}</span><span class="tag purple">${featured.year || "Em breve"}</span>${featured.genres.slice(0,3).map((genre) => `<span class="tag">${escapeHTML(genre)}</span>`).join("")}</div>
       <p>${escapeHTML(featured.overview)}</p><div class="action-row"><button class="btn btn-primary" data-watch="${escapeHTML(featured.id)}">▶ Assistir <span class="mono">play()</span></button><button class="btn btn-ghost" data-detail="${escapeHTML(featured.id)}">Detalhes</button><button class="btn btn-ghost" data-favorite="${escapeHTML(featured.id)}">＋ Minha Lista</button></div>
@@ -141,7 +148,7 @@ async function showDetails(id) {
     state.all.set(media.id, media);
     const favorite = state.favorites.has(media.id);
     root.innerHTML = `<div class="modal-shell"><article class="detail-modal" role="dialog" aria-modal="true" aria-label="${escapeHTML(media.title)}">
-      <div class="detail-hero"><img src="${escapeHTML(media.backdrop || media.poster || fallbackImage)}" alt=""><button class="icon-btn modal-close" aria-label="Fechar">✕</button><div class="detail-title"><span class="eyebrow">&lt;${media.media_type}/&gt;</span><h2>${escapeHTML(media.title)}</h2><div class="meta"><span class="tag gold">★ ${Number(media.rating).toFixed(1)}</span><span class="tag purple">${media.year || "—"}</span>${media.genres.map((genre) => `<span class="tag">${escapeHTML(genre)}</span>`).join("")}</div></div></div>
+      <div class="detail-hero"><img src="${escapeHTML(assetURL(media.backdrop || media.poster) || fallbackImage)}" alt=""><button class="icon-btn modal-close" aria-label="Fechar">✕</button><div class="detail-title"><span class="eyebrow">&lt;${media.media_type}/&gt;</span><h2>${escapeHTML(media.title)}</h2><div class="meta"><span class="tag gold">★ ${Number(media.rating).toFixed(1)}</span><span class="tag purple">${media.year || "—"}</span>${media.genres.map((genre) => `<span class="tag">${escapeHTML(genre)}</span>`).join("")}</div></div></div>
       <div class="detail-body"><div class="detail-layout"><div><span class="mono prompt">&gt; sinopse</span><p>${escapeHTML(media.overview || "Sinopse não disponível.")}</p><div class="action-row"><button class="btn btn-primary" data-watch="${escapeHTML(media.id)}">▶ Assistir</button>${media.trailer ? `<a class="btn btn-ghost" href="${escapeHTML(media.trailer)}" target="_blank" rel="noopener">Trailer</a>` : ""}<button class="btn btn-ghost" data-favorite="${escapeHTML(media.id)}">${favorite ? "✓ Na Minha Lista" : "+ Minha Lista"}</button></div></div>
       <aside class="facts"><div><b>título_original:</b> ${escapeHTML(media.original_title || media.title)}</div><div><b>duração:</b> ${media.duration ? `${media.duration} min` : "não informada"}</div><div><b>status:</b> ${escapeHTML(media.status || "não informado")}</div><div><b>direção:</b> ${escapeHTML(media.director || "não informada")}</div><div><b>elenco:</b> ${escapeHTML(media.cast?.join(", ") || "não informado")}</div><div><b>classificação:</b> ${escapeHTML(media.certification || "não informada")}</div></aside></div>
       ${seasonsTemplate(media)}
@@ -199,7 +206,7 @@ async function performSearch(query) {
   try {
     const result = await api.search({ q: state.query, sort: state.sort });
     result.items.forEach((item) => state.all.set(item.id, item));
-    panel.innerHTML = result.items.slice(0, 7).map((item) => `<button class="search-result" data-media-id="${escapeHTML(item.id)}"><img src="${escapeHTML(item.poster || fallbackImage)}" alt=""><span><b>${escapeHTML(item.title)}</b><small>${item.year || "—"} · ${labels[item.media_type]}</small></span><span>→</span></button>`).join("") || `<div class="empty-state">nenhum_resultado()</div>`;
+    panel.innerHTML = result.items.slice(0, 7).map((item) => `<button class="search-result" data-media-id="${escapeHTML(item.id)}"><img src="${escapeHTML(assetURL(item.poster) || fallbackImage)}" alt=""><span><b>${escapeHTML(item.title)}</b><small>${item.year || "—"} · ${labels[item.media_type]}</small></span><span>→</span></button>`).join("") || `<div class="empty-state">nenhum_resultado()</div>`;
     panel.classList.remove("hidden");
     panel.querySelectorAll("[data-media-id]").forEach((button) => button.onclick = () => { panel.classList.add("hidden"); showDetails(button.dataset.mediaId); });
     renderCatalog();
@@ -252,6 +259,7 @@ async function init() {
     const home = await api.home();
     state.session = { ...activity, user: home.user || activity.user };
     state.sections = home.sections;
+    state.providers = home.providers;
     Object.values(state.sections).flat().forEach((item) => state.all.set(item.id, item));
     await loadUserCollections();
     shell(); renderHero(); fillFilters(); renderCatalog();

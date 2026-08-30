@@ -1,3 +1,5 @@
+import asyncio
+
 import httpx
 
 from backend.providers.base import MetadataProvider
@@ -9,13 +11,17 @@ class TMDBProvider(MetadataProvider):
     api_root = "https://api.themoviedb.org/3"
     image_root = "https://image.tmdb.org/t/p"
 
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str = "", read_access_token: str = ""):
         self.api_key = api_key
+        self.read_access_token = read_access_token
 
     async def _get(self, path: str, **params) -> dict:
-        params.update({"api_key": self.api_key, "language": "pt-BR"})
+        params["language"] = "pt-BR"
+        headers = {"Authorization": f"Bearer {self.read_access_token}"} if self.read_access_token else {}
+        if self.api_key:
+            params["api_key"] = self.api_key
         async with httpx.AsyncClient(timeout=12) as client:
-            response = await client.get(f"{self.api_root}{path}", params=params)
+            response = await client.get(f"{self.api_root}{path}", params=params, headers=headers)
             response.raise_for_status()
             return response.json()
 
@@ -39,15 +45,27 @@ class TMDBProvider(MetadataProvider):
         )
 
     async def home(self) -> dict[str, list[MediaItem]]:
-        trending = await self._get("/trending/all/week")
-        movies = await self._get("/movie/popular")
-        series = await self._get("/tv/popular")
+        trending, movies, series, anime, cartoons, releases = await asyncio.gather(
+            self._get("/trending/all/week"),
+            self._get("/movie/popular"),
+            self._get("/tv/popular"),
+            self._get("/discover/tv", with_genres="16", with_origin_country="JP", sort_by="popularity.desc"),
+            self._get("/discover/tv", with_genres="16", without_origin_country="JP", sort_by="popularity.desc"),
+            self._get("/movie/now_playing", region="BR"),
+        )
         normalized_trending = [self._normalize(item) for item in trending.get("results", []) if item.get("media_type") in {"movie", "tv"}]
+        anime_items = [self._normalize(item, "tv") for item in anime.get("results", [])]
+        cartoon_items = [self._normalize(item, "tv") for item in cartoons.get("results", [])]
+        for item in anime_items:
+            item.media_type = "anime"
+        for item in cartoon_items:
+            item.media_type = "cartoon"
         return {
             "featured": normalized_trending[:5], "trending": normalized_trending,
             "movies": [self._normalize(item, "movie") for item in movies.get("results", [])],
             "series": [self._normalize(item, "tv") for item in series.get("results", [])],
-            "anime": [], "cartoons": [], "releases": normalized_trending,
+            "anime": anime_items, "cartoons": cartoon_items,
+            "releases": [self._normalize(item, "movie") for item in releases.get("results", [])],
         }
 
     async def search(self, query: str, page: int = 1) -> list[MediaItem]:

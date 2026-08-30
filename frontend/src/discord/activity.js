@@ -11,12 +11,19 @@ export class DiscordActivity {
 
   async initialize() {
     const config = await this.api.config();
-    if (!config.discord_client_id || window.self === window.top) return this.snapshot(false);
+    this.config = config;
+    if (window.self === window.top) return this.snapshot(false);
+    const proxyClientId = location.hostname.endsWith(".discordsays.com") ? location.hostname.split(".")[0] : "";
+    const clientId = config.discord_client_id || proxyClientId;
+    if (!clientId) return this.snapshot(false);
     try {
-      this.sdk = new DiscordSDK(config.discord_client_id);
-      await this.sdk.ready();
+      this.sdk = new DiscordSDK(clientId);
+      await Promise.race([
+        this.sdk.ready(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Tempo limite ao conectar com o Discord")), 10000)),
+      ]);
       const { code } = await this.sdk.commands.authorize({
-        client_id: config.discord_client_id,
+        client_id: clientId,
         response_type: "code",
         state: crypto.randomUUID(),
         prompt: "none",
@@ -39,6 +46,6 @@ export class DiscordActivity {
   }
 
   snapshot(embedded) {
-    return { embedded, user: this.user, instanceId: this.instanceId, participants: this.participants };
+    return { embedded, user: this.user, instanceId: this.instanceId, participants: this.participants, config: this.config };
   }
 }

@@ -22,13 +22,29 @@ playback = PlaybackResolver()
 
 @router.get("/health")
 def health():
-    return {"status": "ok", "service": "craftplay"}
+    settings = get_settings()
+    return {
+        "status": "ok", "service": "craftplay",
+        "configuration": {
+            "discord_client": bool(settings.discord_client_id),
+            "discord_oauth": bool(settings.discord_client_id and settings.discord_client_secret),
+            "tmdb": bool(settings.tmdb_api_key or settings.tmdb_read_access_token),
+            "environment": settings.environment,
+        },
+    }
 
 
 @router.get("/config")
 def public_config():
     settings = get_settings()
-    return {"discord_client_id": settings.discord_client_id, "activity_url": settings.discord_activity_url, "environment": settings.environment}
+    return {
+        "discord_client_id": settings.discord_client_id,
+        "activity_url": settings.discord_activity_url,
+        "environment": settings.environment,
+        "discord_configured": bool(settings.discord_client_id and settings.discord_client_secret),
+        "tmdb_configured": bool(settings.tmdb_api_key or settings.tmdb_read_access_token),
+        "plenoflu_enabled": settings.plenoflu_enabled,
+    }
 
 
 @router.post("/discord/interactions")
@@ -67,7 +83,7 @@ async def discord_auth(payload: DiscordAuthRequest, db: Session = Depends(get_db
 @router.get("/home")
 async def home(user: User = Depends(current_user)):
     sections = await catalog.home()
-    return {"sections": sections, "user": {"discord_id": user.discord_id, "username": user.username, "avatar": user.avatar}}
+    return {"sections": sections, "providers": catalog.status(), "user": {"discord_id": user.discord_id, "username": user.username, "avatar": user.avatar}}
 
 
 @router.get("/search")

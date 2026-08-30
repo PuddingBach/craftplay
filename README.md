@@ -59,6 +59,7 @@ DISCORD_PUBLIC_KEY=chave_publica_da_aplicacao
 DISCORD_GUILD_ID=servidor_de_teste_opcional
 DISCORD_ACTIVITY_URL=https://craftplay.shardweb.app
 TMDB_API_KEY=chave_tmdb_opcional
+TMDB_READ_ACCESS_TOKEN=token_de_leitura_tmdb_opcional
 PLENOFLU_ENABLED=false
 DATABASE_URL=postgresql+psycopg://usuario:senha@host:5432/craftplay
 SECRET_KEY=gere-um-valor-aleatorio-longo
@@ -71,7 +72,7 @@ PORT=8000
 
 ## 3. Como obter as chaves
 
-- **TMDB:** crie uma conta em [The Movie Database](https://www.themoviedb.org/), abra Configurações → API, solicite uma chave e coloque-a em `TMDB_API_KEY`. Sem a chave, o catálogo aberto local continua funcionando.
+- **TMDB:** crie uma conta em [The Movie Database](https://www.themoviedb.org/), abra Configurações → API e copie o **Token de Leitura da API** para `TMDB_READ_ACCESS_TOKEN`. Alternativamente, a chave v3 pode ser colocada em `TMDB_API_KEY`. Sem uma das duas credenciais, somente o catálogo aberto local é exibido.
 - **Discord:** no [Discord Developer Portal](https://discord.com/developers/applications), crie ou abra a aplicação. O Application ID é `DISCORD_CLIENT_ID`; a Public Key fica em General Information; o Client Secret em OAuth2; o token é gerado na seção Bot.
 - **PostgreSQL:** use a URL fornecida pelo serviço da ShardCloud. URLs iniciadas com `postgres://` e `postgresql://` são normalizadas automaticamente para o driver Psycopg.
 - **SECRET_KEY:** gere localmente com `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
@@ -89,7 +90,7 @@ O endpoint valida toda requisição com Ed25519 antes de responder. Requisiçõe
 ## 5. Configurar e iniciar a Discord Activity
 
 1. Abra **Activities → Settings** e habilite Activities.
-2. Em **URL Mappings**, crie o prefixo `/` apontando para `craftplay.shardweb.app`.
+2. Em **URL Mappings**, crie o prefixo `/` apontando para `craftplay.shardweb.app`. O target não pode conter `https://` nem uma rota de arquivo.
 3. Configure os domínios externos usados pelas imagens/fontes nas regras de rede da Activity. Se ativar PlenoFlu, permita `plenoflu.com` como destino de frame; o próprio serviço também precisa autorizar incorporação.
 4. O Discord cria automaticamente o Entry Point **Launch**. Ele pode ser renomeado no portal.
 5. Registre o comando adicional:
@@ -143,6 +144,20 @@ No painel da ShardCloud, associe `craftplay.shardweb.app` ao serviço web e agua
 - confirme que o proxy encaminha upgrade de conexão para `/ws/*`.
 
 A porta nunca é fixa: Uvicorn lê `PORT` fornecida pelo ambiente.
+
+### Diagnóstico da implantação
+
+Abra `https://craftplay.shardweb.app/api/health`. Em `configuration`, os valores `discord_client`, `discord_oauth` e `tmdb` devem ser `true`, e `environment` deve ser `production`. A rota `/api/config` também informa apenas se as integrações estão configuradas, sem revelar seus segredos.
+
+Se a Activity abrir em branco, confirme no Discord Developer Portal:
+
+```text
+Activities → URL Mappings
+PREFIX: /
+TARGET: craftplay.shardweb.app
+```
+
+O frontend detecta `discordsays.com` e usa automaticamente o caminho compatível `/.proxy` para API, assets locais e WebSocket.
 
 ## 9. Adicionar metadata providers
 

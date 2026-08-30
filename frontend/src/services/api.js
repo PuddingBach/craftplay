@@ -1,5 +1,6 @@
 export class ApiClient {
   constructor() {
+    this.proxyPrefix = location.hostname.endsWith(".discordsays.com") ? "/.proxy" : "";
     this.token = sessionStorage.getItem("craftplay_token") || "";
     this.localUser = JSON.parse(localStorage.getItem("craftplay_local_user") || "null") || {
       discord_id: `local-${crypto.randomUUID()}`,
@@ -23,7 +24,8 @@ export class ApiClient {
       headers.set("X-Discord-User-Id", this.localUser.discord_id);
       headers.set("X-Discord-Username", this.localUser.username);
     }
-    const response = await fetch(path, { ...options, headers });
+    const target = path.startsWith("/") ? `${this.proxyPrefix}${path}` : path;
+    const response = await fetch(target, { ...options, headers });
     if (!response.ok) {
       const problem = await response.json().catch(() => ({}));
       throw new Error(problem.detail || `Falha na API (${response.status})`);
@@ -45,4 +47,3 @@ export class ApiClient {
   createRoom(instanceId) { return this.request("/api/rooms", { method: "POST", body: JSON.stringify({ discord_instance_id: instanceId }) }); }
   discordAuth(code) { return this.request("/api/auth/discord", { method: "POST", body: JSON.stringify({ code }) }); }
 }
-

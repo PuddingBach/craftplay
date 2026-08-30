@@ -50,6 +50,8 @@ img { max-width: 100%; }
   min-height: 70px; padding: 12px var(--page); background: rgba(5, 7, 16, .84);
   backdrop-filter: blur(18px); border-bottom: 1px solid rgba(255, 255, 255, .05);
 }
+.setup-warning { position: relative; z-index: 35; display: grid; gap: 4px; padding: 10px var(--page); color: #ffd6a1; background: rgba(125,73,10,.34); border-bottom: 1px solid rgba(255,184,84,.3); font-size: 12px; }
+.setup-warning b { color: #ffbd66; font-family: "JetBrains Mono", monospace; }
 .logo { display: flex; align-items: center; gap: 10px; flex: none; border: 0; background: none; padding: 0; }
 .logo-ring { width: 40px; height: 40px; display: grid; place-items: center; border: 5px solid var(--blue); border-right-color: var(--purple); border-radius: 50%; font: 700 10px "JetBrains Mono"; }
 .logo-copy { display: grid; text-align: left; line-height: 1; }

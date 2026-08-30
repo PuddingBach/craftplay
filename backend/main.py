@@ -1,4 +1,5 @@
 import os
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -20,6 +21,7 @@ async def lifespan(app: FastAPI):
 
 
 settings = get_settings()
+logger = logging.getLogger("craftplay.websocket")
 app = FastAPI(title="CraftPlay API", version="1.0.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
@@ -47,10 +49,13 @@ async def room_socket(websocket: WebSocket, room_id: str):
                 await websocket.send_json({"event": "ERROR", "message": "Sala inválida"})
                 continue
             await room_manager.handle(room_id, discord_id, payload)
-    except (WebSocketDisconnect, RuntimeError):
+    except WebSocketDisconnect:
         await room_manager.disconnect(room_id, discord_id)
     except ValueError:
         await websocket.close(code=4404, reason="Sala não encontrada")
+    except Exception:
+        logger.exception("Falha no WebSocket da sala %s para o usuário %s", room_id, discord_id)
+        await room_manager.disconnect(room_id, discord_id)
 
 
 FRONTEND = Path(__file__).resolve().parents[1] / "public"
@@ -69,4 +74,3 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run("backend.main:app", host="0.0.0.0", port=int(os.getenv("PORT", "8000")))
-
