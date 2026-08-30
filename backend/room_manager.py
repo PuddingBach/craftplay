@@ -7,7 +7,7 @@ from fastapi import WebSocket
 from sqlalchemy import select
 
 from backend.browser.service import browser_service
-from backend.browser.livekit import set_room_privacy
+from backend.browser.livekit import livekit_configured, set_room_privacy
 from backend.browser.state import browser_state_store
 from backend.browser.settings import browser_setting
 from backend.config import get_settings
@@ -211,9 +211,10 @@ class RoomManager:
                 if event.startswith("PRIVACY"):
                     session.privacy_mode = event == "PRIVACY_ON"
                     if session.privacy_mode: session.controller_user_id = None; session.control_expires_at = None
-                    try: await set_room_privacy(session.stream_room_name, host_id, session.privacy_mode)
-                    except RuntimeError as exc:
-                        await self.send(room_id, discord_id, {"event": "BROWSER_ERROR", "message": str(exc)}); return
+                    if livekit_configured():
+                        try: await set_room_privacy(session.stream_room_name, host_id, session.privacy_mode)
+                        except RuntimeError as exc:
+                            await self.send(room_id, discord_id, {"event": "BROWSER_ERROR", "message": str(exc)}); return
                 else: session.session_locked = bool(payload.get("locked", True))
                 db.commit(); await self.broadcast(room_id, {"event": event, "privacy_mode": session.privacy_mode, "session_locked": session.session_locked}); return
             if not can_control or (session.privacy_mode and not is_host):
