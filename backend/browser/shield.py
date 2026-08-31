@@ -1,7 +1,8 @@
+import asyncio
 from collections import Counter
 from urllib.parse import urlparse
 
-from backend.browser.security import is_allowed_hostname, same_site, validate_public_url
+from backend.browser.security import _domain_matches, load_domain_policy, same_site, validate_public_url
 
 
 TRACKER_MARKERS = (
@@ -18,6 +19,10 @@ class BrowserShield:
         self.allow_downloads = allow_downloads
         self.metrics = Counter(ads=0, trackers=0, popups=0, redirects=0, downloads=0)
         self.events: list[dict] = []
+        self.blocked_domains: dict[str, str] = {}
+        self.allowed_domains: tuple[str, ...] = ()
+        self.validated_hosts: set[str] = set()
+        self.host_locks: dict[str, asyncio.Lock] = {}
 
     def record(self, kind: str, url: str = "") -> None:
         self.metrics[kind] += 1
@@ -25,6 +30,7 @@ class BrowserShield:
         self.events = self.events[-100:]
 
     async def install(self, context, page) -> None:
+        self.blocked_domains, self.allowed_domains = load_domain_policy()
         await context.route("**/*", self._route)
         context.on("page", lambda popup: self._schedule_popup_close(popup))
         page.on("download", lambda download: self._schedule_download_cancel(download))
@@ -41,12 +47,21 @@ class BrowserShield:
             return
         if target.startswith(("http://", "https://")):
             try:
-                await validate_public_url(target, enforce_allowlist=self.mode == "STRICT" and request.resource_type == "document")
+                lock = self.host_locks.setdefault(host, asyncio.Lock())
+                async with lock:
+                    if host not in self.validated_hosts:
+                        await validate_public_url(
+                            target,
+                            blocked_domains=self.blocked_domains,
+                            allowed_domains=self.allowed_domains,
+                        )
+                        self.validated_hosts.add(host)
             except ValueError:
                 self.record("redirects", target)
                 await route.abort("blockedbyclient")
                 return
-        if self.mode == "STRICT" and request.resource_type == "document" and not same_site(host, self.original_host) and not is_allowed_hostname(host):
+        allowed = any(_domain_matches(host, rule) for rule in self.allowed_domains)
+        if self.mode == "STRICT" and request.resource_type == "document" and not same_site(host, self.original_host) and not allowed:
             self.record("redirects", target)
             await route.abort("blockedbyclient")
             return

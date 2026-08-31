@@ -21,6 +21,22 @@ class SafeURL:
     addresses: tuple[str, ...]
 
 
+def load_domain_policy() -> tuple[dict[str, str], tuple[str, ...]]:
+    """Load dashboard domain rules once for a browser session."""
+    with SessionLocal() as db:
+        blocked = {
+            row.domain.casefold(): row.reason
+            for row in db.scalars(select(BlockedDomain)).all()
+        }
+        allowed = tuple(row.domain.casefold() for row in db.scalars(select(AllowedDomain)).all())
+    return blocked, allowed
+
+
+def _domain_matches(hostname: str, rule: str) -> bool:
+    normalized = rule.lstrip("*.").rstrip(".").casefold()
+    return bool(normalized) and (hostname == normalized or hostname.endswith(f".{normalized}"))
+
+
 def _is_public_address(address: str) -> bool:
     ip = ipaddress.ip_address(address)
     return not (
@@ -29,7 +45,13 @@ def _is_public_address(address: str) -> bool:
     )
 
 
-async def validate_public_url(url: str, *, enforce_allowlist: bool = False) -> SafeURL:
+async def validate_public_url(
+    url: str,
+    *,
+    enforce_allowlist: bool = False,
+    blocked_domains: dict[str, str] | None = None,
+    allowed_domains: tuple[str, ...] | None = None,
+) -> SafeURL:
     parsed = urlparse(url.strip())
     if parsed.scheme not in {"http", "https"}:
         raise ValueError("Somente URLs HTTP e HTTPS sao permitidas")
@@ -43,15 +65,15 @@ async def validate_public_url(url: str, *, enforce_allowlist: bool = False) -> S
     except ValueError as exc:
         raise ValueError("Porta invalida") from exc
 
-    with SessionLocal() as db:
-        blocked = next((row for row in db.scalars(select(BlockedDomain)).all()
-                        if hostname == row.domain.lstrip("*.") or hostname.endswith(f".{row.domain.lstrip('*.')}")), None)
-        if blocked:
-            raise ValueError(f"Dominio bloqueado: {blocked.reason or hostname}")
-        if enforce_allowlist:
-            allowed = db.scalars(select(AllowedDomain)).all()
-            if allowed and not any(hostname == row.domain or hostname.endswith(f".{row.domain}") for row in allowed):
-                raise ValueError("Dominio fora da lista permitida")
+    if blocked_domains is None or allowed_domains is None:
+        loaded_blocked, loaded_allowed = load_domain_policy()
+        blocked_domains = loaded_blocked if blocked_domains is None else blocked_domains
+        allowed_domains = loaded_allowed if allowed_domains is None else allowed_domains
+    blocked = next(((rule, reason) for rule, reason in blocked_domains.items() if _domain_matches(hostname, rule)), None)
+    if blocked:
+        raise ValueError(f"Dominio bloqueado: {blocked[1] or hostname}")
+    if enforce_allowlist and allowed_domains and not any(_domain_matches(hostname, rule) for rule in allowed_domains):
+        raise ValueError("Dominio fora da lista permitida")
 
     try:
         results = await asyncio.to_thread(socket.getaddrinfo, hostname, port, type=socket.SOCK_STREAM)
@@ -68,5 +90,5 @@ def same_site(hostname: str, original: str) -> bool:
 
 
 def is_allowed_hostname(hostname: str) -> bool:
-    with SessionLocal() as db:
-        return any(hostname == row.domain or hostname.endswith(f".{row.domain}") for row in db.scalars(select(AllowedDomain)).all())
+    _, allowed = load_domain_policy()
+    return any(_domain_matches(hostname, rule) for rule in allowed)

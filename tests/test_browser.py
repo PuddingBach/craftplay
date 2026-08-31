@@ -143,6 +143,31 @@ async def test_shield_blocks_advertising_request():
 
 
 @pytest.mark.asyncio
+async def test_shield_validates_each_resource_host_only_once(monkeypatch):
+    shield = BrowserShield("STANDARD", "example.com")
+    calls = []
+
+    async def validate(url, **_kwargs):
+        calls.append(url)
+        return SimpleNamespace(url=url, hostname="cdn.example.com", addresses=("93.184.216.34",))
+
+    class Route:
+        def __init__(self, url):
+            self.request = SimpleNamespace(url=url, resource_type="media")
+            self.continued = False
+        async def continue_(self): self.continued = True
+        async def abort(self, _reason): pass
+
+    monkeypatch.setattr("backend.browser.shield.validate_public_url", validate)
+    first = Route("https://cdn.example.com/video/segment-1.m4s")
+    second = Route("https://cdn.example.com/video/segment-2.m4s")
+    await shield._route(first)
+    await shield._route(second)
+    assert first.continued and second.continued
+    assert len(calls) == 1
+
+
+@pytest.mark.asyncio
 async def test_shield_cancels_download_by_default():
     shield = BrowserShield("STANDARD", "example.com", allow_downloads=False)
     cancelled = []
