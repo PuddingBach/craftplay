@@ -22,6 +22,8 @@ export class RemoteBrowserViewer extends EventTarget {
     this.fallbackImage = null;
     this.frameObjectUrl = null;
     this.httpPollTimer = null;
+    this.streamAbort = null;
+    this.streamReconnectTimer = null;
     this.lastWebSocketFrameAt = 0;
     this.destroyed = false;
     this.lastMove = 0;
@@ -65,6 +67,7 @@ export class RemoteBrowserViewer extends EventTarget {
       const requestFrame = () => this.roomSync.send("BROWSER_FRAME_REQUEST");
       if (!requestFrame()) this.roomSync.addEventListener("open", requestFrame, { once: true });
     }
+    this.startHttpStream();
     this.startHttpFallback();
     this.bindInput();
   }
@@ -79,6 +82,26 @@ export class RemoteBrowserViewer extends EventTarget {
     return this.fallbackImage;
   }
 
+  startHttpStream() {
+    const connect = async () => {
+      if (this.destroyed || !this.roomSync.ticket) return;
+      this.streamAbort?.abort();
+      this.streamAbort = new AbortController();
+      try {
+        await this.api.browserFrameStream(
+          this.roomId,
+          this.roomSync.ticket,
+          this.streamAbort.signal,
+          (frame) => this.onRoomMessage({ event: "BROWSER_FRAME", ...frame, transport: "http-stream" }),
+        );
+      } catch (error) {
+        if (!this.destroyed && error.name !== "AbortError") this.setStatus("Reconectando transmissão...");
+      }
+      if (!this.destroyed) this.streamReconnectTimer = setTimeout(connect, 1000);
+    };
+    connect();
+  }
+
   startHttpFallback() {
     const poll = async () => {
       if (this.destroyed) return;
@@ -91,7 +114,7 @@ export class RemoteBrowserViewer extends EventTarget {
           const image = this.ensureFallbackImage();
           image.onload = () => { if (previousUrl) URL.revokeObjectURL(previousUrl); };
           image.src = nextUrl;
-          this.setStatus("Screencast conectado por HTTP · áudio indisponível neste servidor");
+          this.setStatus("Screencast conectado por HTTP · áudio requer publisher");
         } catch (error) {
           this.setStatus(error.message || "Captura do navegador indisponível");
         }
@@ -165,7 +188,7 @@ export class RemoteBrowserViewer extends EventTarget {
         this.frameObjectUrl = null;
       }
       this.fallbackImage.src = `data:${message.mime || "image/jpeg"};base64,${message.data}`;
-      this.setStatus("Screencast conectado · áudio indisponível neste servidor");
+      this.setStatus(message.transport === "http-stream" ? "Transmissão HTTP até 30 FPS · áudio requer publisher" : "Screencast conectado · áudio requer publisher");
     }
     if (message.event === "BROWSER_ERROR") {
       this.setStatus(message.message || "Screencast do navegador indisponível");
@@ -204,6 +227,8 @@ export class RemoteBrowserViewer extends EventTarget {
   destroy() {
     this.destroyed = true;
     clearTimeout(this.httpPollTimer);
+    clearTimeout(this.streamReconnectTimer);
+    this.streamAbort?.abort();
     if (this.frameObjectUrl) URL.revokeObjectURL(this.frameObjectUrl);
     this.roomSync.removeEventListener("message", this.boundMessage);
     this.livekit?.disconnect();

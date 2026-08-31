@@ -87,6 +87,33 @@ export class ApiClient {
     }
     return response.blob();
   }
+  async browserFrameStream(roomId, ticket, signal, onFrame) {
+    const path = `/api/browser/session/stream?room_id=${encodeURIComponent(roomId)}`;
+    const response = await fetch(`${this.proxyPrefix}${path}`, {
+      credentials: "same-origin",
+      headers: { Accept: "application/x-ndjson", Authorization: `Bearer ${ticket}` },
+      cache: "no-store",
+      signal,
+    });
+    if (!response.ok || !response.body) {
+      const problem = await response.json().catch(() => ({}));
+      throw new Error(problem.detail || `Falha na transmissão (${response.status})`);
+    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try { onFrame(JSON.parse(line)); } catch { /* ignore malformed partial frames */ }
+      }
+    }
+  }
   browserFavorites() { return this.request("/api/browser/favorites"); }
   addBrowserFavorite(id) { return this.request(`/api/browser/favorites/${id}`, { method: "POST" }); }
   removeBrowserFavorite(id) { return this.request(`/api/browser/favorites/${id}`, { method: "DELETE" }); }

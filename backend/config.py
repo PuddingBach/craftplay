@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     browser_headless: bool = False
     browser_auto_install: bool = True
     browser_websocket_fallback: bool = True
-    browser_frame_fps: int = 6
+    browser_frame_fps: int = 30
     browser_frame_quality: int = 55
     browser_homepage: str = "about:blank"
     browser_profile_root: str = "./browser_profiles"

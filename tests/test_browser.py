@@ -315,6 +315,19 @@ def test_authenticated_http_frame_fallback_returns_jpeg(monkeypatch):
     assert actions and actions[0][0] == "MOUSE_CLICK"
 
 
+def test_browser_frame_stream_rejects_invalid_ticket_without_opening_stream():
+    with TestClient(app) as client:
+        response = client.get(
+            "/api/browser/session/stream?room_id=missing-room",
+            headers={"Authorization": "Bearer invalid-ticket"},
+        )
+    assert response.status_code == 401
+
+
+def test_browser_frame_rate_defaults_to_thirty():
+    assert Settings(_env_file=None).browser_frame_fps == 30
+
+
 def test_websocket_ticket_is_bound_to_room():
     user = SimpleNamespace(discord_id="ws-user", username="WS User", avatar=None)
     ticket = create_websocket_ticket(user, "room-one")

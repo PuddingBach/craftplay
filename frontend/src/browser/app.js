@@ -4,6 +4,22 @@ import { RemoteBrowserViewer } from "./remote-viewer.js";
 const escapeHTML = (value = "") => String(value).replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]);
 const fallback = "data:image/svg+xml," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="600" height="360"><rect width="100%" height="100%" fill="#12182a"/><text x="50%" y="50%" text-anchor="middle" fill="#7289da" font-size="70">CP</text></svg>`);
 
+function confirmDialog(message, title = "Confirmar ação") {
+  return new Promise((resolve) => {
+    const backdrop = document.createElement("div");
+    backdrop.className = "confirm-backdrop";
+    backdrop.innerHTML = `<section class="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="confirm-title"><h2 id="confirm-title">${escapeHTML(title)}</h2><p>${escapeHTML(message)}</p><div><button class="btn btn-ghost" data-cancel>Cancelar</button><button class="btn btn-danger" data-confirm>Confirmar</button></div></section>`;
+    const finish = (result) => { document.removeEventListener("keydown", onKey); backdrop.remove(); resolve(result); };
+    const onKey = (event) => { if (event.key === "Escape") finish(false); };
+    backdrop.addEventListener("click", (event) => { if (event.target === backdrop) finish(false); });
+    backdrop.querySelector("[data-cancel]").onclick = () => finish(false);
+    backdrop.querySelector("[data-confirm]").onclick = () => finish(true);
+    document.addEventListener("keydown", onKey);
+    document.body.append(backdrop);
+    backdrop.querySelector("[data-confirm]").focus();
+  });
+}
+
 export async function initBrowserMode({ app, api, discord }) {
   if (location.pathname === "/dashboard") return initDashboard(app, api);
   if (location.pathname === "/debug/browser") return initBrowserDebug(app, api);
@@ -27,6 +43,13 @@ export async function initBrowserMode({ app, api, discord }) {
   roomSync.connect();
   const state = { activity, user, room, roomSync, capabilities, entries: [], favorites: new Set(), viewer: null, query: "" };
   await loadEntries(api, state);
+  try {
+    const activeSession = await api.browserSession(room.id);
+    await showBrowserSession(app, api, state, activeSession);
+    return;
+  } catch (error) {
+    if (error.status !== 404) throw error;
+  }
   renderBrowserHome(app, api, state);
 }
 
@@ -80,12 +103,17 @@ async function openBrowser(app, api, state, target) {
     setLoading(app, "Iniciando sessão...");
     const session = await api.startBrowserSession({ room_id: state.room.id, ...target });
     setLoading(app, "Conectando transmissão...");
-    renderBrowserView(app, api, state, session);
-    state.viewer = new RemoteBrowserViewer({ mount: app, roomSync: state.roomSync, api, roomId: state.room.id, user: state.user, canControl: state.capabilities.can_navigate });
-    await state.viewer.connect();
+    await showBrowserSession(app, api, state, session);
   } catch (error) {
     renderFriendlyError(app, error.message, () => renderBrowserHome(app, api, state));
   }
+}
+
+async function showBrowserSession(app, api, state, session) {
+  state.viewer?.destroy();
+  renderBrowserView(app, api, state, session);
+  state.viewer = new RemoteBrowserViewer({ mount: app, roomSync: state.roomSync, api, roomId: state.room.id, user: state.user, canControl: state.capabilities.can_navigate });
+  await state.viewer.connect();
 }
 
 function renderLoading(app, message) {
@@ -109,7 +137,7 @@ function renderBrowserView(app, api, state, session) {
   app.querySelector("[data-control]")?.addEventListener("click", () => state.roomSync.send("CONTROL_REQUEST"));
   app.querySelector("[data-privacy]")?.addEventListener("click", (event) => { const enabled = event.currentTarget.dataset.enabled !== "true"; event.currentTarget.dataset.enabled = String(enabled); state.roomSync.send(enabled ? "PRIVACY_ON" : "PRIVACY_OFF"); });
   app.querySelector("[data-lock]")?.addEventListener("click", (event) => { const locked = event.currentTarget.dataset.locked !== "true"; event.currentTarget.dataset.locked = String(locked); state.roomSync.send("SESSION_LOCK", { locked }); });
-  app.querySelector("[data-close]")?.addEventListener("click", async () => { if (confirm("Encerrar o navegador desta sala?")) { await api.closeBrowserSession(state.room.id); state.viewer?.destroy(); renderBrowserHome(app, api, state); } });
+  app.querySelector("[data-close]")?.addEventListener("click", async () => { if (await confirmDialog("Encerrar o navegador desta sala?", "Encerrar sessão")) { await api.closeBrowserSession(state.room.id); state.viewer?.destroy(); renderBrowserHome(app, api, state); } });
   state.roomSync.addEventListener("message", (event) => renderControlQueue(app, state, event.detail));
 }
 
@@ -147,13 +175,13 @@ async function initDashboard(app, api, allowClaim = true) {
     app.querySelectorAll("[data-edit]").forEach((button) => button.onclick = () => { const entry = entries.find((item) => item.id === Number(button.dataset.edit)); for (const field of ["name", "url", "entry_type", "category", "poster_url", "banner_url", "icon_url", "description", "shield_mode", "open_mode", "trust_level", "sort_order"]) if (form[field]) form[field].value = entry[field] ?? ""; form.entry_id.value = entry.id; form.featured.checked = entry.featured; form.pinned.checked = entry.pinned; form.enabled.checked = entry.enabled; form.expires_at.value = entry.expires_at ? entry.expires_at.slice(0,16) : ""; form.querySelector("[data-submit-label]").textContent = "Salvar alterações"; form.querySelector("[data-cancel-edit]").classList.remove("hidden"); updatePreview(); form.scrollIntoView({ behavior: "smooth" }); });
     form.querySelector("[data-cancel-edit]").onclick = () => { form.reset(); form.entry_id.value = ""; form.category.value = "sites"; form.enabled.checked = true; form.querySelector("[data-submit-label]").textContent = "Publicar"; form.querySelector("[data-cancel-edit]").classList.add("hidden"); updatePreview(); };
     app.querySelectorAll("[data-toggle]").forEach((button) => button.onclick = async () => { await api.updateBrowserEntry(button.dataset.toggle, { enabled: button.dataset.enabled !== "true" }); location.reload(); });
-    app.querySelectorAll("[data-delete]").forEach((button) => button.onclick = async () => { if (confirm("Excluir esta entrada?")) { await api.deleteBrowserEntry(button.dataset.delete); location.reload(); } });
+    app.querySelectorAll("[data-delete]").forEach((button) => button.onclick = async () => { if (await confirmDialog("Excluir esta entrada?", "Excluir conteúdo")) { await api.deleteBrowserEntry(button.dataset.delete); location.reload(); } });
     app.querySelector(".open-now")?.addEventListener("submit", async (event) => { event.preventDefault(); await api.dashboardOpenNow(Object.fromEntries(new FormData(event.currentTarget))); alert("URL enviada para a sala."); });
     app.querySelector(".browser-settings").onsubmit = async (event) => { event.preventDefault(); const settingsForm = event.currentTarget; await api.updateDashboardBrowserSettings({ control_mode: settingsForm.control_mode.value, shield_mode: settingsForm.shield_mode.value, idle_timeout: Number(settingsForm.idle_timeout.value), max_participants: Number(settingsForm.max_participants.value), homepage: settingsForm.homepage.value, manual_url: settingsForm.manual_url.checked, privacy_on_password: settingsForm.privacy_on_password.checked }); alert("Configurações salvas."); };
     app.querySelector("[data-save-home]")?.addEventListener("click", () => { form.url.value = app.querySelector(".open-now [name=url]").value; updatePreview(); form.scrollIntoView({ behavior: "smooth" }); });
     app.querySelectorAll("[data-room-home]").forEach((button) => button.onclick = async () => { await api.dashboardRoomHome(button.dataset.roomHome); location.reload(); });
     app.querySelectorAll("[data-room-revoke]").forEach((button) => button.onclick = async () => { await api.dashboardRevokeControl(button.dataset.roomRevoke); location.reload(); });
-    app.querySelectorAll("[data-room-close]").forEach((button) => button.onclick = async () => { if (confirm("Encerrar esta sessão?")) { await api.dashboardCloseRoom(button.dataset.roomClose); location.reload(); } });
+    app.querySelectorAll("[data-room-close]").forEach((button) => button.onclick = async () => { if (await confirmDialog("Encerrar esta sessão?", "Encerrar sessão")) { await api.dashboardCloseRoom(button.dataset.roomClose); location.reload(); } });
   } catch (error) {
     if (error.status === 403 && allowClaim) {
       try {

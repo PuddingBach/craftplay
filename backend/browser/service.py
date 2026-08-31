@@ -42,6 +42,8 @@ class BrowserRuntime:
     cdp: Any = None
     last_frame_at: float = 0
     last_frame_data: bytes | None = None
+    last_frame_encoded: str = ""
+    frame_sequence: int = 0
 
 
 class BrowserService:
@@ -259,17 +261,23 @@ class BrowserService:
             quality=min(80, max(30, self.settings.browser_frame_quality)),
         )
 
+    def latest_frame(self, room_id: str) -> tuple[int, str]:
+        runtime = self._require(room_id)
+        return runtime.frame_sequence, runtime.last_frame_encoded
+
     async def _handle_screencast_frame(self, runtime: BrowserRuntime, frame: dict) -> None:
         try:
             await runtime.cdp.send("Page.screencastFrameAck", {"sessionId": frame["sessionId"]})
             now = time.monotonic()
-            fps = min(10, max(1, self.settings.browser_frame_fps))
+            fps = 30
             if now - runtime.last_frame_at < 1 / fps:
                 return
             runtime.last_frame_at = now
             encoded = frame.get("data", "")
             if encoded:
                 runtime.last_frame_data = base64.b64decode(encoded)
+                runtime.last_frame_encoded = encoded
+                runtime.frame_sequence += 1
             from backend.room_manager import room_manager
             await room_manager.broadcast_browser_frame(runtime.room_id, {
                 "event": "BROWSER_FRAME", "mime": "image/jpeg", "data": encoded,

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import re
 import time
@@ -6,12 +7,13 @@ from datetime import datetime, timezone
 from urllib.parse import urljoin
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
+from fastapi.responses import StreamingResponse
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from backend.auth import current_dashboard_admin, current_user
+from backend.auth import current_dashboard_admin, current_user, decode_websocket_ticket
 from backend.browser.livekit import create_viewer_token, livekit_configured, livekit_health
 from backend.browser.security import validate_public_url
 from backend.browser.service import browser_service
@@ -19,7 +21,7 @@ from backend.browser.state import browser_state_store
 from backend.browser.settings import browser_setting
 from backend.playback.validation import validate_media_url
 from backend.config import get_settings
-from backend.database import get_db
+from backend.database import SessionLocal, get_db
 from backend.models import AdminAuditLog, AllowedDomain, BlockedDomain, BrowserEntry, BrowserFavorite, BrowserHistory, BrowserSession, BrowserSetting, Room, User
 from backend.providers import CatalogService
 from backend.schemas import BrowserEntryCreate, BrowserEntryUpdate, BrowserEntryView, BrowserInputCommand, BrowserNavigate, BrowserSessionAction, BrowserSessionStart, BrowserTestRequest
@@ -319,6 +321,55 @@ async def session_frame(room_id: str, user: User = Depends(current_user), db: Se
         content=image,
         media_type="image/jpeg",
         headers={"Cache-Control": "private, no-store, max-age=0", "X-Content-Type-Options": "nosniff"},
+    )
+
+
+@router.get("/session/stream")
+async def session_stream(room_id: str, authorization: str = Header(default="")):
+    """Single authenticated NDJSON stream for high-frame-rate fallback."""
+    ticket = authorization[7:] if authorization.startswith("Bearer ") else ""
+    try:
+        identity = decode_websocket_ticket(ticket, room_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=401, detail="Ticket de transmissao invalido") from exc
+    discord_id = str(identity["sub"])
+    with SessionLocal() as db:
+        row = db.scalar(select(BrowserSession).where(BrowserSession.room_id == room_id, BrowserSession.closed_at.is_(None)))
+        user = db.scalar(select(User).where(User.discord_id == discord_id))
+        if not row or not user:
+            raise HTTPException(status_code=404, detail="Sessao de navegador nao encontrada")
+
+    async def frames():
+        last_sequence = -1
+        privacy_check_at = 0.0
+        may_watch = True
+        interval = 1 / 30
+        while True:
+            now = time.monotonic()
+            if now >= privacy_check_at:
+                with SessionLocal() as check_db:
+                    active = check_db.scalar(select(BrowserSession).where(BrowserSession.room_id == room_id, BrowserSession.closed_at.is_(None)))
+                    may_watch = bool(active and (not active.privacy_mode or active.host_user_id == user.id))
+                if not active:
+                    return
+                privacy_check_at = now + 1
+            try:
+                sequence, encoded = browser_service.latest_frame(room_id)
+            except RuntimeError:
+                return
+            if may_watch and encoded and sequence != last_sequence:
+                last_sequence = sequence
+                yield f'{{"sequence":{sequence},"mime":"image/jpeg","data":"{encoded}"}}\n'.encode()
+            await asyncio.sleep(interval)
+
+    return StreamingResponse(
+        frames(),
+        media_type="application/x-ndjson",
+        headers={
+            "Cache-Control": "private, no-cache, no-store, max-age=0",
+            "X-Accel-Buffering": "no",
+            "X-Content-Type-Options": "nosniff",
+        },
     )
 
 
