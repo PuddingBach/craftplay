@@ -78,9 +78,13 @@ class Settings(BaseSettings):
     @field_validator("dashboard_allowed_role_ids", "dashboard_allowed_user_ids", mode="before")
     @classmethod
     def split_discord_ids(cls, value):
-        if isinstance(value, str):
-            return [item.strip() for item in value.split(",") if item.strip()]
-        return value
+        items = value.split(",") if isinstance(value, str) else value
+        if isinstance(items, (list, tuple, set)):
+            # Accept plain CSV as well as values pasted with JSON brackets or
+            # quotes by hosting dashboards.
+            trim = " \t\r\n[]{}()\"'“”‘’"
+            return [cleaned for item in items if (cleaned := str(item).strip(trim))]
+        return items
 
     @field_validator("browser_headless", mode="before")
     @classmethod

@@ -98,12 +98,19 @@ async def dashboard_callback(
         raise HTTPException(status_code=400, detail="Estado OAuth invalido")
     oauth = await exchange_discord_code(code, settings.discord_redirect_uri)
     profile = oauth["profile"]
+    discord_user_id = str(profile["id"])
     dashboard_auth = craftplay_oauth_purpose != "user"
-    if dashboard_auth and not await verify_dashboard_access(str(profile["id"])):
-        raise HTTPException(status_code=403, detail="Voce nao possui acesso ao canal do dashboard")
+    if dashboard_auth and not await verify_dashboard_access(discord_user_id):
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                f"Acesso negado para o Discord ID {discord_user_id}. "
+                f"Configure DASHBOARD_ALLOWED_USER_IDS={discord_user_id} e reinicie o servico."
+            ),
+        )
     avatar = f"https://cdn.discordapp.com/avatars/{profile['id']}/{profile['avatar']}.png" if profile.get("avatar") else None
     with SessionLocal() as db:
-        user = upsert_user(db, str(profile["id"]), profile.get("global_name") or profile["username"], avatar)
+        user = upsert_user(db, discord_user_id, profile.get("global_name") or profile["username"], avatar)
         token = create_access_token(user, dashboard_admin=dashboard_auth)
     target = "/dashboard" if dashboard_auth else (craftplay_oauth_next or "/")
     if not target.startswith("/") or target.startswith("//"):

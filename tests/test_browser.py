@@ -88,6 +88,11 @@ def test_dashboard_user_ids_accept_comma_separated_env_value():
     assert settings.dashboard_allowed_user_ids == ["123", "456"]
 
 
+def test_dashboard_user_ids_tolerate_quotes_and_json_brackets():
+    settings = Settings(_env_file=None, dashboard_allowed_user_ids='["123", "456"]')
+    assert settings.dashboard_allowed_user_ids == ["123", "456"]
+
+
 def test_entry_slug_is_stable_and_ascii():
     assert slugify("Séries & Animes 2026") == "series-animes-2026"
 

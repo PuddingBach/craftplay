@@ -124,7 +124,10 @@ function renderControlQueue(app, state, message) {
 
 async function initDashboard(app, api) {
   try {
-    const [overview, entries, rooms, browserSettings] = await Promise.all([api.dashboardOverview(), api.dashboardEntries(), api.dashboardRooms(), api.dashboardBrowserSettings()]);
+    // Validate the administrative cookie first, avoiding four simultaneous
+    // forbidden requests when the regular Activity token is still active.
+    const overview = await api.dashboardOverview();
+    const [entries, rooms, browserSettings] = await Promise.all([api.dashboardEntries(), api.dashboardRooms(), api.dashboardBrowserSettings()]);
     app.innerHTML = `<main class="dashboard"><header><div><span class="eyebrow">CRAFTPLAY ADMIN</span><h1>Dashboard do navegador</h1></div><a class="btn btn-ghost" href="/">Abrir Activity</a></header>
       <section class="dashboard-stats"><article><b>${overview.entries}</b><span>Entradas</span></article><article><b>${overview.active_rooms}</b><span>Salas ativas</span></article><article><b>${overview.browser.active_sessions}</b><span>Chromiums</span></article><article><b>${overview.connected_users}</b><span>Conectados</span></article><article><b>${overview.webrtc}</b><span>WebRTC</span></article></section>
       <section class="dashboard-panel"><h2>Buscar metadados no TMDB</h2><form class="tmdb-search"><input required placeholder="Nome do filme ou série"><button class="btn btn-ghost">Buscar</button></form><div class="tmdb-results"></div></section>
