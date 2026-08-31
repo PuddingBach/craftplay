@@ -82,6 +82,11 @@ def current_user(
         username = x_discord_username or "Visitante local"
     if not discord_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Autenticação do Discord necessária")
+    # Frame polling is frequent; do not update and commit the same user on
+    # every authenticated request. Login flows already refresh profile data.
+    user = db.scalar(select(User).where(User.discord_id == str(discord_id)))
+    if user:
+        return user
     return upsert_user(db, str(discord_id), str(username or "Usuário Discord"))
 
 

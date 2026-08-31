@@ -24,7 +24,7 @@ router = APIRouter(prefix="/api")
 catalog = CatalogService()
 playback = PlaybackResolver()
 availability = WatchAvailabilityProvider()
-APP_RELEASE = "2026.08.30.8"
+APP_RELEASE = "2026.08.30.9"
 
 
 def require_admin(x_admin_key: str = Header(default="")):
@@ -46,6 +46,7 @@ def health():
         "configuration": {
             "discord_client": bool(settings.discord_client_id),
             "discord_oauth": bool(settings.discord_client_id and settings.discord_client_secret),
+            "activity_access": "public-discord-users",
             "dashboard_user_allowlist": bool(settings.dashboard_allowed_user_ids),
             "tmdb": bool(settings.tmdb_api_key or settings.tmdb_read_access_token),
             "environment": settings.environment,

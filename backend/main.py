@@ -66,6 +66,20 @@ async def dashboard_login():
     return response
 
 
+@app.get("/invite", include_in_schema=False)
+async def invite_bot():
+    """Public guild-install URL; dashboard allowlists never apply here."""
+    if not settings.discord_client_id:
+        raise HTTPException(status_code=503, detail="Discord Client ID nao configurado")
+    query = urlencode({
+        "client_id": settings.discord_client_id,
+        "scope": "bot applications.commands",
+        "permissions": "0",
+        "integration_type": "0",
+    })
+    return RedirectResponse(f"https://discord.com/oauth2/authorize?{query}")
+
+
 @app.get("/auth/discord/user/login", include_in_schema=False)
 async def user_login(next: str = "/"):
     if not settings.discord_client_id:

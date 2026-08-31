@@ -273,6 +273,8 @@ class RoomManager:
 
     async def broadcast_browser_frame(self, room_id: str, payload: dict) -> None:
         targets = list(self.connections[room_id].items())
+        if not targets:
+            return
         with SessionLocal() as db:
             room = db.get(Room, room_id)
             session = db.scalar(select(BrowserSession).where(BrowserSession.room_id == room_id, BrowserSession.closed_at.is_(None)))

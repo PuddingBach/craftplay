@@ -25,6 +25,7 @@ export class RemoteBrowserViewer extends EventTarget {
     this.lastWebSocketFrameAt = 0;
     this.destroyed = false;
     this.lastMove = 0;
+    this.lastScroll = 0;
     this.boundMessage = (event) => this.onRoomMessage(event.detail);
   }
 
@@ -95,7 +96,7 @@ export class RemoteBrowserViewer extends EventTarget {
           this.setStatus(error.message || "Captura do navegador indisponível");
         }
       }
-      if (!this.destroyed) this.httpPollTimer = setTimeout(poll, 250);
+      if (!this.destroyed) this.httpPollTimer = setTimeout(poll, 500);
     };
     poll();
   }
@@ -107,7 +108,8 @@ export class RemoteBrowserViewer extends EventTarget {
       return normalizePointer(event.clientX, event.clientY, box);
     };
     surface.addEventListener("pointermove", (event) => {
-      if (!this.canInteract() || performance.now() - this.lastMove < (this.websocketReady() ? 33 : 100)) return;
+      // Avoid high-frequency HTTP input on small hosts when WebSocket is down.
+      if (!this.canInteract() || !this.websocketReady() || performance.now() - this.lastMove < 33) return;
       this.lastMove = performance.now();
       this.sendCommand("MOUSE_MOVE", normalized(event));
     });
@@ -115,7 +117,8 @@ export class RemoteBrowserViewer extends EventTarget {
       if (this.canInteract()) this.sendCommand("MOUSE_CLICK", { ...normalized(event), count: event.detail > 1 ? 2 : 1 });
     });
     surface.addEventListener("wheel", (event) => {
-      if (!this.canInteract()) return;
+      if (!this.canInteract() || performance.now() - this.lastScroll < 100) return;
+      this.lastScroll = performance.now();
       event.preventDefault();
       this.sendCommand("MOUSE_SCROLL", { delta_x: event.deltaX, delta_y: event.deltaY });
     }, { passive: false });

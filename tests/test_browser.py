@@ -10,6 +10,7 @@ from backend.browser.api import slugify
 from backend.browser.livekit import create_viewer_token
 from backend.browser.security import _is_public_address, same_site, validate_public_url
 from backend.browser.service import BrowserService
+from backend.bot.register_commands import register as register_discord_commands
 from backend.browser.shield import BrowserShield
 from backend.auth import calculate_channel_access, verify_dashboard_access
 from backend.config import get_settings
@@ -309,6 +310,38 @@ def test_direct_browser_login_starts_discord_oauth_without_open_redirect():
         assert response.headers["location"].startswith("https://discord.com/oauth2/authorize?")
         assert client.cookies.get("craftplay_oauth_purpose") == "user"
         assert client.cookies.get("craftplay_oauth_next").strip('"') == "/"
+
+
+def test_public_bot_invite_uses_guild_install_scopes():
+    with TestClient(app, base_url="https://public.example", follow_redirects=False) as client:
+        response = client.get("/invite")
+    assert response.status_code in {302, 307}
+    location = response.headers["location"]
+    assert location.startswith("https://discord.com/oauth2/authorize?")
+    assert "scope=bot+applications.commands" in location
+    assert "integration_type=0" in location
+
+
+def test_discord_command_is_registered_globally_even_with_test_guild(monkeypatch):
+    settings = get_settings()
+    monkeypatch.setattr(settings, "discord_client_id", "application-id")
+    monkeypatch.setattr(settings, "discord_bot_token", "bot-token")
+    monkeypatch.setattr(settings, "discord_guild_id", "test-guild")
+    calls = []
+
+    class Result:
+        is_error = False
+        def json(self): return {"name": "iniciar-player", "id": "command-id"}
+
+    def post(endpoint, **kwargs):
+        calls.append((endpoint, kwargs["json"]))
+        return Result()
+
+    monkeypatch.setattr("backend.bot.register_commands.httpx.post", post)
+    register_discord_commands()
+    assert calls[0][0].endswith("/applications/application-id/commands")
+    assert calls[0][1]["integration_types"] == [0, 1]
+    assert calls[1][0].endswith("/guilds/test-guild/commands")
 
 
 def test_invalid_optional_browser_headless_does_not_crash_settings():
