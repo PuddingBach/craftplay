@@ -24,7 +24,7 @@ router = APIRouter(prefix="/api")
 catalog = CatalogService()
 playback = PlaybackResolver()
 availability = WatchAvailabilityProvider()
-APP_RELEASE = "2026.08.30.5"
+APP_RELEASE = "2026.08.30.6"
 
 
 def require_admin(x_admin_key: str = Header(default="")):
@@ -109,6 +109,24 @@ async def discord_auth(payload: DiscordAuthRequest, db: Session = Depends(get_db
     avatar = f"https://cdn.discordapp.com/avatars/{profile['id']}/{profile['avatar']}.png" if profile.get("avatar") else None
     user = upsert_user(db, profile["id"], profile.get("global_name") or profile["username"], avatar)
     return {"access_token": create_access_token(user), "discord_access_token": oauth["access_token"], "user": {"discord_id": user.discord_id, "username": user.username, "avatar": user.avatar}}
+
+
+@router.post("/auth/dashboard")
+def dashboard_auth(user: User = Depends(current_user)):
+    """Promote an authenticated Activity user explicitly listed by Discord ID."""
+    settings = get_settings()
+    if user.discord_id not in settings.dashboard_allowed_user_ids:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                f"Acesso negado para o Discord ID {user.discord_id}. "
+                f"Configure DASHBOARD_ALLOWED_USER_IDS={user.discord_id} e reinicie o servico."
+            ),
+        )
+    return {
+        "access_token": create_access_token(user, dashboard_admin=True),
+        "user": {"discord_id": user.discord_id, "username": user.username, "avatar": user.avatar},
+    }
 
 
 @router.get("/home")

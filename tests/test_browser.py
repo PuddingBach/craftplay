@@ -93,6 +93,26 @@ def test_dashboard_user_ids_tolerate_quotes_and_json_brackets():
     assert settings.dashboard_allowed_user_ids == ["123", "456"]
 
 
+def test_authenticated_allowlisted_user_can_claim_dashboard_token(monkeypatch):
+    init_db()
+    suffix = __import__("uuid").uuid4().hex
+    discord_id = f"claim-{suffix}"
+    with SessionLocal() as db:
+        user = upsert_user(db, discord_id, "Dashboard Owner")
+        token = create_access_token(user)
+    settings = get_settings()
+    monkeypatch.setattr(settings, "dashboard_allowed_user_ids", [discord_id])
+    with TestClient(app) as client:
+        claimed = client.post("/api/auth/dashboard", headers={"Authorization": f"Bearer {token}"})
+        assert claimed.status_code == 200, claimed.text
+        admin_token = claimed.json()["access_token"]
+        dashboard = client.get(
+            "/api/dashboard/browser/entries",
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        assert dashboard.status_code == 200, dashboard.text
+
+
 def test_entry_slug_is_stable_and_ascii():
     assert slugify("Séries & Animes 2026") == "series-animes-2026"
 

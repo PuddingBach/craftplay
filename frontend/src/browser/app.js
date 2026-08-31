@@ -122,7 +122,7 @@ function renderControlQueue(app, state, message) {
   target.querySelectorAll("[data-grant]").forEach((button) => button.onclick = () => state.roomSync.send("CONTROL_GRANTED", { target_user_id: button.dataset.grant }));
 }
 
-async function initDashboard(app, api) {
+async function initDashboard(app, api, allowClaim = true) {
   try {
     // Validate the administrative cookie first, avoiding four simultaneous
     // forbidden requests when the regular Activity token is still active.
@@ -155,6 +155,15 @@ async function initDashboard(app, api) {
     app.querySelectorAll("[data-room-revoke]").forEach((button) => button.onclick = async () => { await api.dashboardRevokeControl(button.dataset.roomRevoke); location.reload(); });
     app.querySelectorAll("[data-room-close]").forEach((button) => button.onclick = async () => { if (confirm("Encerrar esta sessão?")) { await api.dashboardCloseRoom(button.dataset.roomClose); location.reload(); } });
   } catch (error) {
+    if (error.status === 403 && allowClaim) {
+      try {
+        const session = await api.claimDashboardAccess();
+        api.setSession(session.access_token, session.user);
+        return initDashboard(app, api, false);
+      } catch (claimError) {
+        error = claimError;
+      }
+    }
     app.innerHTML = `<div class="browser-loading"><h1>Dashboard CraftPlay</h1><p>${escapeHTML(error.message)}</p><a class="btn btn-primary" href="/auth/discord/login">Entrar com Discord</a></div>`;
   }
 }

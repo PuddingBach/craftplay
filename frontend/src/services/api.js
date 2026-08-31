@@ -59,6 +59,7 @@ export class ApiClient {
   createRoom(instanceId) { return this.request("/api/rooms", { method: "POST", body: JSON.stringify({ discord_instance_id: instanceId }) }); }
   roomTicket(roomId) { return this.request(`/api/rooms/${encodeURIComponent(roomId)}/ticket`, { method: "POST" }); }
   discordAuth(code) { return this.request("/api/auth/discord", { method: "POST", body: JSON.stringify({ code }) }); }
+  claimDashboardAccess() { return this.request("/api/auth/dashboard", { method: "POST" }); }
   browserEntries(params = {}) { return this.request(`/api/browser/entries?${new URLSearchParams(params)}`); }
   browserEntry(id) { return this.request(`/api/browser/entries/${id}`); }
   browserStatus() { return this.request("/api/browser/status"); }
