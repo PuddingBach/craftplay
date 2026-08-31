@@ -240,17 +240,21 @@ class BrowserService:
 
     async def capture_frame(self, room_id: str) -> dict:
         """Capture a guaranteed frame when CDP emitted before a viewer subscribed."""
-        runtime = self._require(room_id)
-        image = await runtime.page.screenshot(
-            type="jpeg",
-            quality=min(80, max(30, self.settings.browser_frame_quality)),
-        )
+        image = await self.capture_frame_bytes(room_id)
         return {
             "event": "BROWSER_FRAME",
             "mime": "image/jpeg",
             "data": base64.b64encode(image).decode("ascii"),
             "timestamp": int(time.time() * 1000),
         }
+
+    async def capture_frame_bytes(self, room_id: str) -> bytes:
+        """Return a JPEG screenshot for the authenticated HTTP fallback."""
+        runtime = self._require(room_id)
+        return await runtime.page.screenshot(
+            type="jpeg",
+            quality=min(80, max(30, self.settings.browser_frame_quality)),
+        )
 
     async def _handle_screencast_frame(self, runtime: BrowserRuntime, frame: dict) -> None:
         try:

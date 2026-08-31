@@ -282,6 +282,26 @@ def session_token(room_id: str, user: User = Depends(current_user), db: Session 
     return {"url": get_settings().livekit_url, "token": token, "room": row.stream_room_name}
 
 
+@router.get("/session/frame")
+async def session_frame(room_id: str, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Authenticated JPEG fallback for hosts where WebSockets are interrupted."""
+    row = db.scalar(select(BrowserSession).where(BrowserSession.room_id == room_id, BrowserSession.closed_at.is_(None)))
+    if not row:
+        raise HTTPException(status_code=404, detail="Sessao de navegador nao encontrada")
+    if row.privacy_mode and row.host_user_id != user.id:
+        raise HTTPException(status_code=423, detail="O host esta realizando uma acao privada")
+    try:
+        image = await browser_service.capture_frame_bytes(room_id)
+    except Exception as exc:
+        logger.exception("Falha ao capturar frame HTTP da sala %s", room_id)
+        raise HTTPException(status_code=503, detail=f"Captura do navegador indisponivel: {type(exc).__name__}") from exc
+    return Response(
+        content=image,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "private, no-store, max-age=0", "X-Content-Type-Options": "nosniff"},
+    )
+
+
 @router.get("/favorites")
 def browser_favorites(user: User = Depends(current_user), db: Session = Depends(get_db)):
     return db.scalars(select(BrowserEntry).join(BrowserFavorite, BrowserFavorite.entry_id == BrowserEntry.id).where(BrowserFavorite.user_id == user.id)).all()

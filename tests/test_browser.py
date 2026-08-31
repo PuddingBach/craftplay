@@ -242,6 +242,39 @@ def test_closed_browser_session_is_reopened_instead_of_duplicated(monkeypatch):
         assert rows[0].closed_at is None
 
 
+def test_authenticated_http_frame_fallback_returns_jpeg(monkeypatch):
+    init_db()
+    suffix = __import__("uuid").uuid4().hex
+    with SessionLocal() as db:
+        user = upsert_user(db, f"frame-http-user-{suffix}", "Frame Host")
+        room = Room(discord_instance_id=f"frame-http-room-{suffix}", host_user_id=user.id)
+        db.add(room)
+        db.flush()
+        db.add(BrowserSession(
+            room_id=room.id,
+            host_user_id=user.id,
+            current_url="https://example.com",
+            stream_room_name=f"craftplay-{room.id}",
+            browser_status="READY",
+        ))
+        db.commit()
+        token, room_id = create_access_token(user), room.id
+
+    async def capture(_room_id):
+        return b"\xff\xd8craftplay-jpeg\xff\xd9"
+
+    monkeypatch.setattr("backend.browser.api.browser_service.capture_frame_bytes", capture)
+    with TestClient(app) as client:
+        response = client.get(
+            f"/api/browser/session/frame?room_id={room_id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"] == "image/jpeg"
+    assert response.headers["cache-control"].startswith("private, no-store")
+    assert response.content.startswith(b"\xff\xd8")
+
+
 def test_websocket_ticket_is_bound_to_room():
     user = SimpleNamespace(discord_id="ws-user", username="WS User", avatar=None)
     ticket = create_websocket_ticket(user, "room-one")

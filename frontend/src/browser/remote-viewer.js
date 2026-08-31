@@ -19,6 +19,10 @@ export class RemoteBrowserViewer extends EventTarget {
     this.user = user;
     this.livekit = null;
     this.fallbackImage = null;
+    this.frameObjectUrl = null;
+    this.httpPollTimer = null;
+    this.lastWebSocketFrameAt = 0;
+    this.destroyed = false;
     this.lastMove = 0;
     this.boundMessage = (event) => this.onRoomMessage(event.detail);
   }
@@ -59,7 +63,40 @@ export class RemoteBrowserViewer extends EventTarget {
       const requestFrame = () => this.roomSync.send("BROWSER_FRAME_REQUEST");
       if (!requestFrame()) this.roomSync.addEventListener("open", requestFrame, { once: true });
     }
+    this.startHttpFallback();
     this.bindInput();
+  }
+
+  ensureFallbackImage() {
+    if (!this.fallbackImage) {
+      this.fallbackImage = document.createElement("img");
+      this.fallbackImage.className = "remote-frame";
+      this.fallbackImage.alt = "Navegador remoto";
+      this.mount.querySelector(".remote-media")?.append(this.fallbackImage);
+    }
+    return this.fallbackImage;
+  }
+
+  startHttpFallback() {
+    const poll = async () => {
+      if (this.destroyed) return;
+      if (!this.lastWebSocketFrameAt || Date.now() - this.lastWebSocketFrameAt > 2000) {
+        try {
+          const blob = await this.api.browserFrame(this.roomId);
+          const nextUrl = URL.createObjectURL(blob);
+          const previousUrl = this.frameObjectUrl;
+          this.frameObjectUrl = nextUrl;
+          const image = this.ensureFallbackImage();
+          image.onload = () => { if (previousUrl) URL.revokeObjectURL(previousUrl); };
+          image.src = nextUrl;
+          this.setStatus("Screencast conectado por HTTP · áudio indisponível neste servidor");
+        } catch (error) {
+          this.setStatus(error.message || "Captura do navegador indisponível");
+        }
+      }
+      if (!this.destroyed) this.httpPollTimer = setTimeout(poll, 750);
+    };
+    poll();
   }
 
   bindInput() {
@@ -91,11 +128,11 @@ export class RemoteBrowserViewer extends EventTarget {
 
   onRoomMessage(message) {
     if (message.event === "BROWSER_FRAME" && message.data) {
-      if (!this.fallbackImage) {
-        this.fallbackImage = document.createElement("img");
-        this.fallbackImage.className = "remote-frame";
-        this.fallbackImage.alt = "Navegador remoto";
-        this.mount.querySelector(".remote-media")?.append(this.fallbackImage);
+      this.lastWebSocketFrameAt = Date.now();
+      this.ensureFallbackImage();
+      if (this.frameObjectUrl) {
+        URL.revokeObjectURL(this.frameObjectUrl);
+        this.frameObjectUrl = null;
       }
       this.fallbackImage.src = `data:${message.mime || "image/jpeg"};base64,${message.data}`;
       this.setStatus("Screencast conectado · áudio indisponível neste servidor");
@@ -135,6 +172,9 @@ export class RemoteBrowserViewer extends EventTarget {
   }
 
   destroy() {
+    this.destroyed = true;
+    clearTimeout(this.httpPollTimer);
+    if (this.frameObjectUrl) URL.revokeObjectURL(this.frameObjectUrl);
     this.roomSync.removeEventListener("message", this.boundMessage);
     this.livekit?.disconnect();
     this.livekit = null;

@@ -69,6 +69,23 @@ export class ApiClient {
   navigateBrowser(payload) { return this.request("/api/browser/session/navigate", { method: "POST", body: JSON.stringify(payload) }); }
   closeBrowserSession(roomId) { return this.request("/api/browser/session/close", { method: "POST", body: JSON.stringify({ room_id: roomId }) }); }
   browserStreamToken(roomId) { return this.request(`/api/browser/session/token?room_id=${encodeURIComponent(roomId)}`); }
+  async browserFrame(roomId) {
+    const headers = new Headers();
+    if (this.token) headers.set("Authorization", `Bearer ${this.token}`);
+    else {
+      headers.set("X-Discord-User-Id", this.localUser.discord_id);
+      headers.set("X-Discord-Username", this.localUser.username);
+    }
+    const path = `/api/browser/session/frame?room_id=${encodeURIComponent(roomId)}&t=${Date.now()}`;
+    const response = await fetch(`${this.proxyPrefix}${path}`, { credentials: "same-origin", headers, cache: "no-store" });
+    if (!response.ok) {
+      const problem = await response.json().catch(() => ({}));
+      const error = new Error(problem.detail || `Falha ao capturar navegador (${response.status})`);
+      error.status = response.status;
+      throw error;
+    }
+    return response.blob();
+  }
   browserFavorites() { return this.request("/api/browser/favorites"); }
   addBrowserFavorite(id) { return this.request(`/api/browser/favorites/${id}`, { method: "POST" }); }
   removeBrowserFavorite(id) { return this.request(`/api/browser/favorites/${id}`, { method: "DELETE" }); }
