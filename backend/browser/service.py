@@ -41,6 +41,7 @@ class BrowserRuntime:
     xserver: Any = None
     cdp: Any = None
     last_frame_at: float = 0
+    last_frame_data: bytes | None = None
 
 
 class BrowserService:
@@ -251,6 +252,8 @@ class BrowserService:
     async def capture_frame_bytes(self, room_id: str) -> bytes:
         """Return a JPEG screenshot for the authenticated HTTP fallback."""
         runtime = self._require(room_id)
+        if runtime.last_frame_data:
+            return runtime.last_frame_data
         return await runtime.page.screenshot(
             type="jpeg",
             quality=min(80, max(30, self.settings.browser_frame_quality)),
@@ -264,9 +267,12 @@ class BrowserService:
             if now - runtime.last_frame_at < 1 / fps:
                 return
             runtime.last_frame_at = now
+            encoded = frame.get("data", "")
+            if encoded:
+                runtime.last_frame_data = base64.b64decode(encoded)
             from backend.room_manager import room_manager
             await room_manager.broadcast_browser_frame(runtime.room_id, {
-                "event": "BROWSER_FRAME", "mime": "image/jpeg", "data": frame.get("data", ""),
+                "event": "BROWSER_FRAME", "mime": "image/jpeg", "data": encoded,
                 "timestamp": int(time.time() * 1000),
             })
         except Exception:
@@ -282,7 +288,7 @@ class BrowserService:
         runtime.last_activity = time.monotonic()
         return runtime.current_url
 
-    async def action(self, room_id: str, event: str, payload: dict) -> None:
+    async def action(self, room_id: str, event: str, payload: dict) -> str:
         runtime = self._require(room_id)
         page = runtime.page
         width, height = self.viewport_width, self.viewport_height
@@ -316,6 +322,7 @@ class BrowserService:
             raise ValueError("Evento de navegador desconhecido")
         runtime.current_url = page.url
         runtime.last_activity = time.monotonic()
+        return runtime.current_url
 
     async def close(self, room_id: str, *, preserve_profile: bool = False) -> None:
         runtime = self.sessions.pop(room_id, None)

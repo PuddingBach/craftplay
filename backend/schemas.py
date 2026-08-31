@@ -245,6 +245,18 @@ class BrowserSessionAction(BaseModel):
     room_id: str = Field(min_length=1, max_length=36)
 
 
+class BrowserInputCommand(BaseModel):
+    room_id: str = Field(min_length=1, max_length=36)
+    event: Literal["MOUSE_MOVE", "MOUSE_CLICK", "MOUSE_SCROLL", "KEY_DOWN", "KEY_UP", "TEXT_INPUT", "BACK", "FORWARD", "RELOAD", "HOME", "FOCUS"]
+    x: float | None = Field(default=None, ge=0, le=1)
+    y: float | None = Field(default=None, ge=0, le=1)
+    delta_x: float = Field(default=0, ge=-10000, le=10000)
+    delta_y: float = Field(default=0, ge=-10000, le=10000)
+    count: int = Field(default=1, ge=1, le=2)
+    key: str | None = Field(default=None, max_length=40)
+    text: str | None = Field(default=None, max_length=2000)
+
+
 class BrowserControlGrant(BaseModel):
     room_id: str = Field(min_length=1, max_length=36)
     target_user_id: str = Field(min_length=1, max_length=32)

@@ -67,6 +67,7 @@ export class ApiClient {
   browserSession(roomId) { return this.request(`/api/browser/session?room_id=${encodeURIComponent(roomId)}`); }
   startBrowserSession(payload) { return this.request("/api/browser/session/start", { method: "POST", body: JSON.stringify(payload) }); }
   navigateBrowser(payload) { return this.request("/api/browser/session/navigate", { method: "POST", body: JSON.stringify(payload) }); }
+  browserAction(payload) { return this.request("/api/browser/session/action", { method: "POST", body: JSON.stringify(payload) }); }
   closeBrowserSession(roomId) { return this.request("/api/browser/session/close", { method: "POST", body: JSON.stringify({ room_id: roomId }) }); }
   browserStreamToken(roomId) { return this.request(`/api/browser/session/token?room_id=${encodeURIComponent(roomId)}`); }
   async browserFrame(roomId) {

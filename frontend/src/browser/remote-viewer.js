@@ -10,13 +10,14 @@ export function shouldUseLiveKit(status) {
 }
 
 export class RemoteBrowserViewer extends EventTarget {
-  constructor({ mount, roomSync, api, roomId, user }) {
+  constructor({ mount, roomSync, api, roomId, user, canControl = false }) {
     super();
     this.mount = mount;
     this.roomSync = roomSync;
     this.api = api;
     this.roomId = roomId;
     this.user = user;
+    this.canControl = canControl;
     this.livekit = null;
     this.fallbackImage = null;
     this.frameObjectUrl = null;
@@ -94,7 +95,7 @@ export class RemoteBrowserViewer extends EventTarget {
           this.setStatus(error.message || "Captura do navegador indisponível");
         }
       }
-      if (!this.destroyed) this.httpPollTimer = setTimeout(poll, 750);
+      if (!this.destroyed) this.httpPollTimer = setTimeout(poll, 250);
     };
     poll();
   }
@@ -106,24 +107,50 @@ export class RemoteBrowserViewer extends EventTarget {
       return normalizePointer(event.clientX, event.clientY, box);
     };
     surface.addEventListener("pointermove", (event) => {
-      if (!this.roomSync.canControlBrowser() || performance.now() - this.lastMove < 33) return;
+      if (!this.canInteract() || performance.now() - this.lastMove < (this.websocketReady() ? 33 : 100)) return;
       this.lastMove = performance.now();
-      this.roomSync.send("MOUSE_MOVE", normalized(event));
+      this.sendCommand("MOUSE_MOVE", normalized(event));
     });
     surface.addEventListener("click", (event) => {
-      if (this.roomSync.canControlBrowser()) this.roomSync.send("MOUSE_CLICK", { ...normalized(event), count: event.detail > 1 ? 2 : 1 });
+      if (this.canInteract()) this.sendCommand("MOUSE_CLICK", { ...normalized(event), count: event.detail > 1 ? 2 : 1 });
     });
     surface.addEventListener("wheel", (event) => {
-      if (!this.roomSync.canControlBrowser()) return;
+      if (!this.canInteract()) return;
       event.preventDefault();
-      this.roomSync.send("MOUSE_SCROLL", { delta_x: event.deltaX, delta_y: event.deltaY });
+      this.sendCommand("MOUSE_SCROLL", { delta_x: event.deltaX, delta_y: event.deltaY });
     }, { passive: false });
     surface.addEventListener("keydown", (event) => {
-      if (!this.roomSync.canControlBrowser()) return;
+      if (!this.canInteract()) return;
       event.preventDefault();
-      if (event.key.length === 1) this.roomSync.send("TEXT_INPUT", { text: event.key });
-      else { this.roomSync.send("KEY_DOWN", { key: event.key }); this.roomSync.send("KEY_UP", { key: event.key }); }
+      if (event.key.length === 1) this.sendCommand("TEXT_INPUT", { text: event.key });
+      else { this.sendCommand("KEY_DOWN", { key: event.key }); this.sendCommand("KEY_UP", { key: event.key }); }
     });
+  }
+
+  websocketReady() {
+    return this.roomSync.socket?.readyState === WebSocket.OPEN && Boolean(this.roomSync.state);
+  }
+
+  canInteract() {
+    return this.canControl || this.roomSync.canControlBrowser();
+  }
+
+  sendCommand(event, data = {}) {
+    if (this.websocketReady() && this.roomSync.send(event, data)) return;
+    this.api.browserAction({ room_id: this.roomId, event, ...data }).then((session) => {
+      const field = this.mount.querySelector("[data-browser-url]");
+      if (field && session.current_url) field.value = session.current_url;
+    }).catch((error) => this.setStatus(error.message));
+  }
+
+  async navigate(url) {
+    try {
+      const session = await this.api.navigateBrowser({ room_id: this.roomId, url });
+      const field = this.mount.querySelector("[data-browser-url]");
+      if (field) field.value = session.current_url;
+    } catch (error) {
+      this.setStatus(error.message);
+    }
   }
 
   onRoomMessage(message) {

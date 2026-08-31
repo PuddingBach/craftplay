@@ -22,7 +22,7 @@ from backend.config import get_settings
 from backend.database import get_db
 from backend.models import AdminAuditLog, AllowedDomain, BlockedDomain, BrowserEntry, BrowserFavorite, BrowserHistory, BrowserSession, BrowserSetting, Room, User
 from backend.providers import CatalogService
-from backend.schemas import BrowserEntryCreate, BrowserEntryUpdate, BrowserEntryView, BrowserNavigate, BrowserSessionAction, BrowserSessionStart, BrowserTestRequest
+from backend.schemas import BrowserEntryCreate, BrowserEntryUpdate, BrowserEntryView, BrowserInputCommand, BrowserNavigate, BrowserSessionAction, BrowserSessionStart, BrowserTestRequest
 
 
 router = APIRouter(prefix="/api/browser", tags=["browser"])
@@ -246,6 +246,26 @@ async def navigate(payload: BrowserNavigate, user: User = Depends(current_user),
         raise HTTPException(status_code=423, detail="O host esta realizando uma acao privada")
     try:
         row.current_url = await browser_service.navigate(payload.room_id, payload.url)
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    row.last_activity_at = datetime.now(timezone.utc)
+    db.commit()
+    return serialize_session(db, row)
+
+
+@router.post("/session/action")
+async def session_action(payload: BrowserInputCommand, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """HTTP input fallback for environments that interrupt room WebSockets."""
+    room = db.get(Room, payload.room_id)
+    row = db.scalar(select(BrowserSession).where(BrowserSession.room_id == payload.room_id, BrowserSession.closed_at.is_(None)))
+    if not room or not row:
+        raise HTTPException(status_code=404, detail="Sessao nao encontrada")
+    if not may_control(row, room, user):
+        raise HTTPException(status_code=403, detail="Voce nao possui controle do navegador")
+    if row.privacy_mode and row.host_user_id != user.id:
+        raise HTTPException(status_code=423, detail="O host esta realizando uma acao privada")
+    try:
+        row.current_url = await browser_service.action(payload.room_id, payload.event, payload.model_dump(exclude={"room_id", "event"}))
     except (ValueError, RuntimeError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     row.last_activity_at = datetime.now(timezone.utc)

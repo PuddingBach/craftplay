@@ -263,16 +263,30 @@ def test_authenticated_http_frame_fallback_returns_jpeg(monkeypatch):
     async def capture(_room_id):
         return b"\xff\xd8craftplay-jpeg\xff\xd9"
 
+    actions = []
+
+    async def action(_room_id, event, payload):
+        actions.append((event, payload))
+        return "https://example.com"
+
     monkeypatch.setattr("backend.browser.api.browser_service.capture_frame_bytes", capture)
+    monkeypatch.setattr("backend.browser.api.browser_service.action", action)
     with TestClient(app) as client:
         response = client.get(
             f"/api/browser/session/frame?room_id={room_id}",
             headers={"Authorization": f"Bearer {token}"},
         )
+        command = client.post(
+            "/api/browser/session/action",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"room_id": room_id, "event": "MOUSE_CLICK", "x": .5, "y": .25},
+        )
     assert response.status_code == 200, response.text
     assert response.headers["content-type"] == "image/jpeg"
     assert response.headers["cache-control"].startswith("private, no-store")
     assert response.content.startswith(b"\xff\xd8")
+    assert command.status_code == 200, command.text
+    assert actions and actions[0][0] == "MOUSE_CLICK"
 
 
 def test_websocket_ticket_is_bound_to_room():

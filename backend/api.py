@@ -24,7 +24,7 @@ router = APIRouter(prefix="/api")
 catalog = CatalogService()
 playback = PlaybackResolver()
 availability = WatchAvailabilityProvider()
-APP_RELEASE = "2026.08.30.7"
+APP_RELEASE = "2026.08.30.8"
 
 
 def require_admin(x_admin_key: str = Header(default="")):

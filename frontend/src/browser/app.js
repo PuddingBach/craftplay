@@ -81,7 +81,7 @@ async function openBrowser(app, api, state, target) {
     const session = await api.startBrowserSession({ room_id: state.room.id, ...target });
     setLoading(app, "Conectando transmissão...");
     renderBrowserView(app, api, state, session);
-    state.viewer = new RemoteBrowserViewer({ mount: app, roomSync: state.roomSync, api, roomId: state.room.id, user: state.user });
+    state.viewer = new RemoteBrowserViewer({ mount: app, roomSync: state.roomSync, api, roomId: state.room.id, user: state.user, canControl: state.capabilities.can_navigate });
     await state.viewer.connect();
   } catch (error) {
     renderFriendlyError(app, error.message, () => renderBrowserHome(app, api, state));
@@ -103,8 +103,8 @@ function renderBrowserView(app, api, state, session) {
     <section class="remote-surface" tabindex="0"><div class="remote-media"></div><div class="stream-state">Abrindo site...</div><div class="remote-cursor">Controller</div><div class="privacy-curtain hidden"><span>🔒</span><h2>O host está realizando uma ação privada.</h2></div></section>
     <footer class="browser-controls"><button class="btn btn-ghost" data-home>🏠 CraftPlay</button>${host ? `<button class="btn btn-ghost" data-privacy>🔒 Modo privado</button><button class="btn btn-ghost" data-lock>Bloquear sessão</button><button class="btn btn-danger" data-close>Encerrar sessão</button>` : `<button class="btn btn-primary" data-control>Solicitar controle</button>`}<span class="control-status">${host ? "Você controla o navegador" : "Modo: " + session.control_mode}</span><div class="control-queue"></div></footer>
   </main>`;
-  app.querySelectorAll("[data-command]").forEach((button) => button.onclick = () => state.roomSync.send(button.dataset.command));
-  app.querySelector(".address-bar").onsubmit = (event) => { event.preventDefault(); if (state.roomSync.canControlBrowser()) state.roomSync.send("NAVIGATE", { url: event.currentTarget.querySelector("input").value }); };
+  app.querySelectorAll("[data-command]").forEach((button) => button.onclick = () => state.viewer?.sendCommand(button.dataset.command));
+  app.querySelector(".address-bar").onsubmit = (event) => { event.preventDefault(); if (host || state.roomSync.canControlBrowser()) state.viewer?.navigate(event.currentTarget.querySelector("input").value); };
   app.querySelector("[data-home]").onclick = () => { state.viewer?.destroy(); renderBrowserHome(app, api, state); };
   app.querySelector("[data-control]")?.addEventListener("click", () => state.roomSync.send("CONTROL_REQUEST"));
   app.querySelector("[data-privacy]")?.addEventListener("click", (event) => { const enabled = event.currentTarget.dataset.enabled !== "true"; event.currentTarget.dataset.enabled = String(enabled); state.roomSync.send(enabled ? "PRIVACY_ON" : "PRIVACY_OFF"); });
